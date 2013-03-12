@@ -1,11 +1,14 @@
 ### This script is for analyzing mouse GRO-seq and chromatin-associated-Seq data
 source("/home/jeremy/ExonPipeline/ExonPipeline_functions.r")
 source("/home/jeremy/ExonPipeline/ExonPipeline_analysis_and_plotting_Functions.r")
-source("/home/jeremy/GitHub/useful_R/useful_R.r")
+source("/home/jeremy/Code/useful_R/useful_R.r")
+
+setwd("/home/home/jeremy/ExonPipeline/mm9")
+load("PlottedData4.RData")
 
 settings = setup(getwd())
 
-tenCols = c(rep(rgb(.5,.5,1),5), rep(rgb(1,.5,.5),5))
+tenCols = getwc(rep(rgb(.5,.5,1),5), rep(rgb(1,.5,.5),5))
 
 
 mergedData$nonLastLength = mergedData$GeneLength - mergedData$length
@@ -170,34 +173,9 @@ save(dataWithChrom,file= 'dataWithChrom.RData')
 ##################################################################################################################
 ###################  MOUSE GRO-SEQ ###########################
 ##################################################################################################################
+## Load GRO-seq data
+GRO3 = makeGROdata("/home/home/jeremy/RNAseq/Glass/refseq_and_subsequent_transcripts_with_tag_counts.txt", refGene,"GRO_Data_test.RData",1000)
 
-## Read in GRO data
-#GRO = read.delim("/home/home/jeremy/RNAseq/Glass/refseq_and_subsequent_transcripts.txt",stringsAsFactors=F)
-GRO = read.delim("/home/home/jeremy/RNAseq/Glass/refseq_and_subsequent_transcripts_with_tag_counts.txt",stringsAsFactors=F)
-
-## Calculate the Read-Through (hereafter referred to as 'Runon') and get rid of genes with no measurable read-through.
-GRO$Runon = abs(GRO$post_transcript_end - GRO$post_transcript_start)
-GRO = GRO[!is.na(GRO$Runon),]
-
-## Annotate by merging with refGene
-refGene =add_UniqueID(loadRefgene(settings))
-GRO2 = merge(GRO,refGene[,c("name","UniqueID","strand")],by=1)
-
-## Create .bed file, overlap with refseq.bed
-refGene$TSS = refGene$txStart
-refGene$TSS[refGene$strand=='-'] <- refGene$txEnd[refGene$strand=='-']
-
-options(scipen=10) # make it so I don't write scientific numbers here
-
-## Omit any GRO-seq data when the Read-Through ends within 1Kb of a gene.
-write.table(cbind(refGene$chr, refGene$TSS-1000, refGene$TSS +1000 , refGene$name, 0, refGene$strand),file='refseq.bed',sep="\t",row.names=F,col.names=F, quote=F)
-write.table(cbind(GRO2$chr, GRO2$post_transcript_start-1, GRO2$post_transcript_end+1, GRO2$UniqueID, 0, GRO2$strand.y),file='GRO2.bed',sep="\t",row.names=F,col.names=F, quote=F)
-system("bedtools intersect -a GRO2.bed -b refseq.bed -v -s -wa > GRO_no_TSS_interuptions.bed")
-options(scipen=0)
-
-good_GRO =read.delim("GRO_no_TSS_interuptions.bed", head=F)
-GRO3 <- GRO2[GRO2$UniqueID %in% good_GRO[,4],]
-save(GRO3,file="GRO_Data.RData")
 
 ## Merge with 'mergedData'
 dataWithGRO = merge(mergedData, GRO3 , by='UniqueID',all.x=T)
@@ -296,9 +274,6 @@ plotSplits(dataWithChromGRO,'Runon','Extra Runon Length\nAs a function of # exon
 # ~All >3, non > 4
 dev.off()
 
-
-
-
 ######################################################################################################################################################
 ######################################################################################################################################################
 ## 10/25/2012
@@ -333,17 +308,13 @@ summary(lm(PooledSplicing ~ PC1 + PC2 + PC3 + PC4 + PC5,data=dataWithChrom2))
 prcomp(~length + Energy + Acceptor + FeatureCount + nonLastLength,data=dataWithChromGRO,scale=T)->PC2
 dataWithChromGRO2 = cbind(dataWithChromGRO, PC2$x)
 summary(lm(Runon ~ PC1 + PC2 + PC3 + PC4 + PC5 + PooledSplicing,data=dataWithChromGRO2))
-
-
 ######################################################################################################################################################
 ######################################################################################################################################################
 
 
-
-######################################################################################################################################################
 ######################################################################################################################################################
 ## 10/29/2012
-
+######################################################################################################################################################
 ################# EXPECTED TIME TO FINISH SPLICING #################
 #### Run Analytical model of CTS for all genes, to calculate expected time of COMPLETE splicing, AFTER the last intron as been synthesized
 
@@ -520,25 +491,6 @@ BP_PerEnergyZ = 1/10*3000 # This means that 3000 bp/minute *1/10 minute = 300 bp
 OffsetBP = 3.5 # O means i will penalize some genes, 3.5 means all genes at at least a tiny boost.
 Energy_BP = BP_PerEnergyZ*(dataWithChromGROTime2$EnergyZ + OffsetBP)
 
-########## Expected splicing ~ [Expected elongation length] * Rate, where Rate ~ 1/Splicing_Time
-# Use 'expected time', which tracks ALL exons, using a conversion from splice site strength to kinetic rate
-#dataWithChromGROTime2$expectedSplicing =   (dataWithChromGROTime2$length +  Energy_BP) #/ dataWithChromGROTime2$MinutesToSplice
-#dataWithChromGROTime2$expectedSplicing2 =   (dataWithChromGROTime2$length + dataWithChromGROTime2$Runon + Energy_BP) #/ dataWithChromGROTime2$MinutesToSplice
-#dataWithChromGROTime2$expectedSplicingSimple =  (dataWithChromGROTime2$Acceptor) * (dataWithChromGROTime2$length + Energy_BP) 
-#dataWithChromGROTime2$expectedSplicingSimple2 =  (dataWithChromGROTime2$Acceptor) * (dataWithChromGROTime2$length + dataWithChromGROTime2$Runon + Energy_BP) 
-## Attempts to Normalize, get rid of NAs to make them more comparable.
-#dataWithChromGROTime2$expectedSplicingSimple[is.na(dataWithChromGROTime2$expectedSplicingSimple2)] <- NA
-#dataWithChromGROTime2$expectedSplicingSimple.Z = normalize(dataWithChromGROTime2$expectedSplicingSimple)
-#dataWithChromGROTime2$expectedSplicingSimple2.Z = normalize(dataWithChromGROTime2$expectedSplicingSimple2)
-#dataWithChromGROTime2$expectedSplicingSimpleGroup = splitByVector(dataWithChromGROTime2$expectedSplicingSimple, quantile(dataWithChromGROTime2$expectedSplicingSimple,na.rm=T,(1:4)/5)) # split into 5 groups
-#dataWithChromGROTime2$expectedSplicingSimpleGroup2 = splitByVector(dataWithChromGROTime2$expectedSplicingSimple2, quantile(dataWithChromGROTime2$expectedSplicingSimple2,na.rm=T,(1:4)/5)) # split into 5 groups
-
-### Use Final length AFTER intron, (plus add a little bit for pausing)
-#dataWithChromGROTime2$expectedSplicing =   (dataWithChromGROTime2$length +  Energy_BP)/3000
-#dataWithChromGROTime2$expectedSplicing2 =   (dataWithChromGROTime2$LengthAfterIntron +  Energy_BP)/3000 
-#NAME1 = "Approximate Time available to Splice (min)\n(Length , 6sec/EnergyZ)"
-#NAME2 = "Approximate Time available to Splice (min)\n(Length + Runon, 6sec/EnergyZ)"
-
 ### Estimate time it took to splice ... 
 dataWithChromGROTime2$expectedSplicing =   ((dataWithChromGROTime2$LengthAfterIntron +  Energy_BP)/2000)
 dataWithChromGROTime2$expectedSplicing2 =   (1-dataWithChromGROTime2$PooledSplicing)*((dataWithChromGROTime2$LengthAfterIntron +  Energy_BP)/2000) 
@@ -634,529 +586,221 @@ temp2 = merge(temp1, subset(refGene, select= c("UniqueID","txStart","txEnd","exo
 write.delim(temp2, File='genes_for_analyticalModel_withRunon.txt')
 
 ####### Call the matlab code that simulates all genes:
-dat = calculateSplicingRunon_MATLAB('genes_for_analyticalModel_withRunon.txt',3000,30,'0.5,2,15,60')
-
-## Merge and plot
-png('modelSplicingRunon3.png')
-plot(dat[,2],dat[,3],ylab='WithRunon', xlab='No Runon', main='Predicted CTS efficiency')
-dev.off()
-
-dat$GRO_improvement = dat$PredSplice2 - dat$PredSplice1
-summary( dat$PredSplice2)
-
+dat = calculateSplicingRunon_MATLAB('genes_for_analyticalModel_withRunon.txt',3000,30,conversionFactor<-'2,20,5,100,1,2')
+#conversionFactor =  '0.5,5,5,300';dat =   read.table(sprintf("genes_for_analyticalModel_withRunon_splicingRatesRunon_3000.00_30.00_%s.txt",conversionFactor),col.names=c("UniqueID","PredSplice","PredSplice_strength","PredSplice_pause","PredSplice_runon","PredSplice_ALL")) 
 dataWithChromGROpredictions = merge(dataWithChromGRO,dat, by='UniqueID',all.x=T)
 
 ######################################################################################################################################################
+#### 11/29/2012
+
+# Here I'm simulating 5 times, first with only the structures, then adding one by one the splicing, pausing, runon, then ALL together
+plotFig4Like(dataWithChromGROpredictions, '_simple_SplitImprovementbyLength9','Group','last exon length','median')
+plotFig4Like(dataWithChromGROpredictions, '_simple_SplitImprovementbyLengthGroup9','LengthGroup','last exon length','median')
+
+
+############################################################################################################################################
+### (12/3/2012): Putting the AVERAGE splicing of that category into the model, not the individual splicing (it's so noisy!)
+####### Call the matlab code that simulates all genes:
+
+strength_nonLast = mean(ACCEPTOR[ACCEPTOR[,2]==0,1],na.rm=T)
+strength_lasts_avg = tapply(mergedData$Acceptor,mergedData$Group,mean)
+
+##### For all genes with > 1 intron, model with uniform splicing throughout EXCEPT for the last intron.
+# Series of merges to create this file
+mergedTemp = merge(data.frame(strength_lasts_avg),mergedData[mergedData$FeatureCount > 2,], by.x=0, by.y = 'Group')
+mergedTemp2 = data.frame(UniqueID = mergedTemp$UniqueID,SplicingStrength2= paste(sapply(mergedTemp$FeatureCount-2,function(x)paste(rep(strength_nonLast,x),collapse=",")),mergedTemp$strength_lasts_avg,sep=","))
+temp3 = merge(temp2, mergedTemp2, by = 'UniqueID')
+temp3$SpliceStrengths = temp3$SplicingStrength2
+## Save the data to file
+write.delim(temp3[,1:9], File='genesUniform_for_analyticalModel_withRunon.txt')
+
+## Run simulation
+dat2 = calculateSplicingRunon_MATLAB('genesUniform_for_analyticalModel_withRunon.txt',3000,30,conversionFactor<-'2,20,5,100,1,1')
+#conversionFactor =  '2,20,5,100,1,2';dat2 =   read.table(sprintf("genes_for_analyticalModel_withRunon_splicingRatesRunon_3000.00_30.00_%s.txt",conversionFactor),col.names=c("UniqueID","PredSplice","PredSplice_strength","PredSplice_pause","PredSplice_runon","PredSplice_ALL")) 
+
+##  PLOT FIGURE
+dataWithChromGROpredictions = merge(dataWithChromGRO,dat2, by='UniqueID',all.x=T)
+plotFig4Like(dataWithChromGROpredictions, '_simple_SplitImprovement_UniformByLength3newBoost','Group','last exon length','median')
+
+
+################################
+## Here I'm simulating by starting first with ALL uniform splicing (but for each gene, make the splicing Z be the same WITHIN the gene first, THEN do it separately)
+dat3 = calculateSplicingRunon_MATLAB('genes_for_analyticalModel_withRunon.txt',3000,30,conversionFactor<-'2,20,5,100,1,2',VERSION=2)
+conversionFactor =  '2,20,5,100,1,2';dat3 =   read.table(sprintf("genes_for_analyticalModel_withRunon_splicingRatesRunon2_3000.00_30.00_%s.txt",conversionFactor),col.names=c("UniqueID","PredSplice","PredSplice_strength","PredSplice_pause","PredSplice_runon","PredSplice_ALL")) 
+
+##  PLOT FIGURE
+dataWithChromGROpredictions3 = merge(dataWithChromGRO,dat3, by='UniqueID',all.x=T)
+plotFig4Like(dataWithChromGROpredictions3, '_simple_SplitImprovementV2byLength1','Group','last exon length','median')
+
+
+###############################################################
+#### 12/4/12
+# Going to output stuff for matlab so I can redo Fig 4 with the Z scores: also going to make Fig 5C, which uses the Read-through
+lengths_last =  tapply(mergedData$length,mergedData$Group,mean)
+strength_nonLast = mean(ACCEPTOR[ACCEPTOR[,2]==0,1],na.rm=T)
+strength_lasts_avg = tapply(mergedData$Acceptor,mergedData$Group,mean)
+energy_lasts_avg = tapply(mergedData$Energy,mergedData$Group,mean)
+runon_lasts_avg = tapply(dataWithGRO$Runon,dataWithGRO$Group,mean,na.rm=T)
+
+write.delim(cbind(lengths_last,strength_lasts_avg,strength_nonLast,energy_lasts_avg,runon_lasts_avg), 'Normalized_averages_byLength_withRunon.txt') 
+
+#### 12/5/12
+## Alex wants to look at "the ratio of measured last exon vs predicted last exon (= correction factor)"
+dataWithGRO$correction_factor = (dataWithGRO$Runon +dataWithGRO$length) / dataWithGRO$length
+dataWithGRO$correction_factor2 = (dataWithGRO$Runon+dataWithGRO$length)
+dataWithGRO$correction_factor_random = sample(dataWithGRO$Runon,nrow(dataWithGRO)) / dataWithGRO$length
+
+## First set of pictures Alex wants
+png("GRO_figures1_%d.png",height=400,width=400)
+CEX=1.1
+par(cex=CEX)
+#par(mfrow=c(1,2));hist(log10(dataWithGRO$length),main='last exons length ',xaxt='n', xlab='Distance (bp)'); axis(1,at=0:5,label=10^(0:5)); 
+hist(log10(dataWithGRO$Runon), main= "Read-through length", xaxt='n', xlab='Distance (bp)'); axis(1,at=0:5,label=10^(0:5))
+
+par(cex=CEX)
+xlabs = tapply(dataWithGRO$length,dataWithGRO$Group,function(x)paste(range(x),collapse='-'))
+plotSplits(dataWithGRO,column='correction_factor_random','Ratio of measured over predicted Last Exon Lengths\nfor each Last Exon bin',Group='Group',ylab='Correction Factor',xlab='', xaxt='n',type='b',lwd=2,col='red');
+plotSplits(dataWithGRO,'correction_factor','',Group='Group',add=T,ylab='',xlab='', xaxt='n',type='b',lwd=2); axis(1,at=1:5,lab=xlabs,las=3)
+
+emf("Fig5C.emf",width=5,height=5)
+par(cex=CEX)
+plotSplits(dataWithGRO,column='correction_factor','Correction Factor for each Last Exon bin',Group='Group',ylab='Ratio of measured over predicted Last Exon Lengths',xlab='', xaxt='n',type='b',lwd=2,col='red');
+axis(1,at=1:5,lab=xlabs,las=3)
+dev.off()
+
+par(cex=CEX)
+plotSplits(dataWithGRO,'correction_factor2','Total last exon length\nAs a function of predicted last exon length',Group='Group',ylab='Length(bp)',xlab='', xaxt='n',type='b',lwd=2,ylim=c(0,5500)); axis(1,at=1:5,lab=xlabs,las=3)
+par(lty=2,cex=CEX)
+plotSplits(dataWithGRO,column='length','',Group='Group',ylab='Length(bp)',xlab='', xaxt='n',type='b',add=T,lwd=2);
+#plotSplits(dataWithGRO,'correction_factor2','Read-through+length/exon length\nAs a function of # exons',Group='Group',ylab='Correction Factor',xlab='', xaxt='n',type='b',lwd=2); axis(1,at=1:5,lab=xlabs,las=3)
+
+dev.off()
+
+## Some more figures, this time different size
+png("GRO_figures2_%d.png",height=400,width=400)
+CEX=0.8; CEX.LAB=1.5
+## Scatter plot
+par(cex=CEX, cex.lab=CEX.LAB,cex.axis=CEX.LAB)
+plot(log10(dataWithGRO$length), log10(dataWithGRO$Runon + dataWithGRO$length),xlab='Predicted Last Exon Length',ylab='Measured Last Exon Length')
+abline(a=0,b=1)
+par(cex=CEX, cex.lab=CEX.LAB,cex.axis=CEX.LAB)
+plot(log10(dataWithGRO$length), log10(dataWithGRO$Runon),xlab='Predicted Last Exon Length',ylab='Read-through Length')
+abline(a=0,b=1)
+
+par(cex=CEX*1.2, cex.lab=CEX.LAB/.8,cex.axis=CEX.LAB)
+a=plot2Hists(list(log10(dataWithGRO$length),log10(dataWithGRO$Runon+dataWithGRO$length)),'Re-calculation of last exon lengths','Exon Length',leg=c('Predicted','Measured'),N=30,xaxt='n')
+dev.off()
+
+### Redo Figures: Black and grey Figure '6' (HK/nonHK)
 source("/home/jeremy/ExonPipeline/ExonPipeline_analysis_and_plotting_Functions.r")
-png(sprintf('%s_simple4.2_SplitRunonImprovementbyOthers3.png',settings$CommonName),height=800,width=1200)
-par(mfrow=c(2,3),cex.axis=1.2,cex=1.3,cex.main=1.1,las=3,mar=c(6.1 ,4.1 ,4.1, 2.1)) ; options(warn=-1) -> W
 
-xlabs = tapply(mergedData$length,mergedData$Group,function(x)paste(range(x),collapse='-'))
+png("HK_fig_withGRO.png",height=300,width=1200)
+layout(mat=matrix(1:6,nrow=1),widths=c(1,1,1,2,2,2))
+par(mar=c(6,3,1,0),cex=1)
+makeBoxplot (data.frame(Value=dataWithGRO$length, isLast=dataWithGRO$isHK), mainText ='Predicted Last Exons',T, NAMES=c('non-HK','HK'), addStats=F,at=1:4,labels=10^(1:4),notch=T,lwd=3, border=c("black","gray"))
+makeBoxplot (data.frame(Value=dataWithGRO$Runon, isLast=dataWithGRO$isHK), mainText ='Read-through',T, NAMES=c('non-HK','HK'), addStats=F,at=1:4,labels=10^(1:4),notch=T,lwd=3, border=c("black","gray"))
+makeBoxplot (data.frame(Value=dataWithGRO$length+dataWithGRO$Runon, isLast=dataWithGRO$isHK), mainText ='Measured Last Exons',T, NAMES=c('non-HK','HK'), addStats=F,at=1:4,labels=10^(1:4),notch=T,lwd=3, border=c("black","gray"))
+#dev.off()
+#
+#png("HK_fig_withGRO2.png",height=300,width=1200)
+#par(mfrow=c(1,4))
+par(cex=0.8)
+a=plot2Hists(list(log10(dataWithGRO$length[dataWithGRO$isHK==1]),log10(dataWithGRO$length[dataWithGRO$isHK==0])),'Predicted Last Exon Length','Exon Length',leg=c('HK','non-HK'),N=50)
+a=plot2Hists(list(log10((dataWithGRO$Runon)[dataWithGRO$isHK==1]),log10((dataWithGRO$Runon)[dataWithGRO$isHK==0])),'Read-through','Exon Length',leg=c('HK','non-HK'),N=50)
+a=plot2Hists(list(log10((dataWithGRO$length+dataWithGRO$Runon)[dataWithGRO$isHK==1]),log10((dataWithGRO$length+dataWithGRO$Runon)[dataWithGRO$isHK==0])),'Mesaured Last Exon Length','Exon Length',leg=c('HK','non-HK'),N=50)
+dev.off()
 
-plotSplitsHK(dataWithChromGROpredictions,'PredSplice1','Splicing \nAs a function of last exon length',Group='Group',xlab='',names=xlabs,ylab='',YLIM=c(0.2,0.9))
-plotSplits(dataWithChromGROpredictions,'PredSplice2','',Group='Group',add=T,type='b',lwd=2)
-plotSplitsHK(dataWithChromGROpredictions,'PredSplice2','Splicing with Read-through \nAs a function of last exon length',Group='Group',xlab='',names=xlabs,ylab='',YLIM=c(0.2,0.9))
-plotSplits(dataWithChromGROpredictions,'PredSplice2','',Group='Group',add=T,type='b',lwd=2)
 
-plotSplitsHK(dataWithChromGROpredictions,'PredSplice1','Splicing\nAs a function of last exon length',Group='Group',ylab='',xlab='Last Exon Length',names=xlabs,YLIM=c(0.2,0.8))
-plotSplitsHK(dataWithChromGROpredictions,'PredSplice2','',Group='Group',add=T,LTY=2,YLIM=c(0.2,0.8))
+#### 12/11/12
+source("/home/jeremy/GitHub/useful_R/useful_R.r")
+library(RColorBrewer)
+library(devEMF)
+COLS = col2rgb(brewer.pal(5, "Set1")[c(2,1)])
 
-xlabs = tapply(mergedData$length,mergedData$LengthGroup,function(x)paste(range(x),collapse='-'))
-plotSplitsHK(dataWithChromGROpredictions,'PredSplice1','Splicing\nAs a function of LengthGroup',Group='LengthGroup',ylab='',xlab='',names=xlabs,YLIM=c(0.2,0.9))
-plotSplits(dataWithChromGROpredictions,'PredSplice1','',Group='LengthGroup',add=T,type='b',lwd=2)
-plotSplitsHK(dataWithChromGROpredictions,'PredSplice2','Splicing with Read-through \nAs a function of LengthGroup',Group='LengthGroup',ylab='',xlab='',names=xlabs,YLIM=c(0.2,0.9))
-plotSplits(dataWithChromGROpredictions,'PredSplice2','',Group='LengthGroup',add=T,type='b',lwd=2)
+COLS2 =  c(rgb(COLS[1,1]/256,COLS[2,1]/256,COLS[3,1]/256,alpha=1), rgb(COLS[1,2]/256,COLS[2,2]/256,COLS[3,2]/256,alpha=1))
 
-plotSplitsHK(dataWithChromGROpredictions,'PredSplice1','Splicing\nAs a function of LengthGroup',Group='LengthGroup',ylab='',xlab='Last Exon Length',names=xlabs,YLIM=c(0.3,0.8))
-plotSplitsHK(dataWithChromGROpredictions,'PredSplice2','',Group='LengthGroup',add=T,LTY=2,YLIM=c(0.3,0.8))
+png("GRO_figure5.2.png",height=400,width=400)
+emf("GRO_figure5.2.emf",height=6,width=6)
+CEX=0.8; CEX.LAB=1.5
+par(cex=CEX*1.2, cex.lab=CEX.LAB/.8,cex.axis=CEX.LAB)
+a=plot2Densities(list(log10(dataWithGRO$length),log10(dataWithGRO$Runon+dataWithGRO$length)),'Re-calculation of last exon lengths','Exon Length',cols=COLS2,lwd=3,leg=c('Predicted','Measured'),xaxt='n',leg.at='topleft')
+axis(1,at=1:6,lab=10^(1:6))
+grid()
+dev.off()
 
-options(W); dev.off()
 
-summary(lm(GRO_improvement ~ log10(length) + FeatureCount, data=dataWithChromGROpredictions))
-######################################################################################################################################################
 
-png(sprintf('%s_simple7_SplitRunonImprovementbyOthers3.png',settings$CommonName),height=600,width=1200)
-par(mfrow=c(1,2),cex.axis=1.2,cex=1.3,cex.main=1.1,las=3,mar=c(6.1 ,4.1 ,4.1, 2.1)) ; options(warn=-1) -> W
 
-xlabs = tapply(mergedData$length,mergedData$Group,function(x)paste(range(x),collapse='-'))
-plotSplitsHK(dataWithChromGRO,'Runon','GRO-seq Read-Through Length\nAs a function of last exon length',Group='LengthGroup',xlab='',names=xlabs,ylab='')
+############################
+## 12/12
+# Redo Figure 6
+source("/home/jeremy/ExonPipeline/ExonPipeline_analysis_and_plotting_Functions.r")
 
-xlabs = tapply(mergedData$length,mergedData$Group,function(x)paste(range(x),collapse='-'))
-plotSplitsHK(dataWithChromGROpredictions,'PredSplice1','Splicing\nAs a function of last exon length',Group='Group',xlab='',ylab='',names=xlabs,YLIM=c(0.0,0.4))
-plotSplitsHK(dataWithChromGROpredictions,'PredSplice2','',Group='Group',add=T,LTY=2,YLIM=c(0.0,0.4),xlab='Last Exon Length',ylbias=-1)
+emf("Fig 6.emf",width=8,height=4)
+#pdf("Fig 6.pdf",width=8,height=4)
+#par(mfrow=c(1,4))
+layout(mat=matrix(1:4,nrow=1),widths=c(2,2,3,3))
 
-options(W); dev.off()
+makeBoxplot (data.frame(Value=dataWithGRO$length, isLast=dataWithGRO$isHK), mainText='',T, NAMES=c('non-HK','HK'),ylab='Predicted Exon Length (bp)', addStats=F,at=1:4,labels=10^(1:4),notch=T,lwd=4, border=c("black","gray"))
+makeBoxplot (data.frame(Value=dataWithGRO$Runon,  isLast=dataWithGRO$isHK), mainText='',T, NAMES=c('non-HK','HK'), ylab='Read-through (bp)', addStats=F,at=1:4,labels=10^(1:4),notch=T,lwd=4, border=c("black","gray"))
 
-### Try doing GRO while ALLOWING 0's:
+## Make colors' default changeable!
+plotSplitsHK(mergedData,column='Energy','',Group='Group',ylab='Nucleosome Stability Score',xlab='', names=NULL,colors=c("gray","black"),lwd=4)
+plotSplitsHK(mergedData,'Acceptor','',Group='Group',ylab='Splice Site Strength Score',xlab='', names=NULL,colors=c("gray","black"),lwd=4)
+dev.off()
 
+
+
+
+#### 12/17/2012
+exonCategories = getFirstMiddleLast(exons)
+exonLengths = lapply(exonCategories,function(x)log10(abs(x$end-x$start)))
+emf("Fig 2D.emf")
+boxplot(exonLengths,names=c('First','Middle','Last'),yaxt='n', ylab='Exon Lengths', xlab='', main='',las=3)
+axis(2,at=0:6,lab=10^(0:6))
+dev.off()
+
+
+
+##### 12/20/2012
 ##################################################################################################################
-###################  MOUSE GRO-SEQ ###########################
+################### REDO  MOUSE GRO-SEQ ###########################
 ##################################################################################################################
 
-## Read in GRO data
-GRO = read.delim("/home/home/jeremy/RNAseq/Glass/refseq_and_subsequent_transcripts_with_tag_counts.txt",stringsAsFactors=F)
+#
+refGene = add_UniqueID(loadRefgene(settings))
 
-## Calculate the Read-Through (hereafter referred to as 'Runon') and ***set genes with no measurable read-through to 0***
-NAs = is.na(GRO$post_transcript_start)
-GRO$post_transcript_start[NAs & GRO$strand==0] <- GRO$gene_end + 1
-GRO$post_transcript_start[NAs & GRO$strand==1] <- GRO$gene_start - 1
-GRO$post_transcript_end[NAs] <- GRO$post_transcript_start[NAs]
-
-GRO$Runon = abs(GRO$post_transcript_end - GRO$post_transcript_start)
-
-## Annotate by merging with refGene
-refGene =add_UniqueID(loadRefgene(settings))
-GRO2 = merge(GRO,refGene[,c("name","UniqueID","strand")],by=1)
-
-options(scipen=10) # make it so I don't write scientific numbers here
-## Omit any GRO-seq data when the Read-Through ends within 1Kb of a gene.
-write.table(cbind(GRO2$chr, GRO2$post_transcript_start-1, GRO2$post_transcript_end+1, GRO2$UniqueID, 0, GRO2$strand.y),file='GRO2.2.bed',sep="\t",row.names=F,col.names=F, quote=F)
-system("bedtools intersect -a GRO2.2.bed -b refseq.bed -v -s -wa > GRO_no_TSS_interuptions2.bed")
-options(scipen=0)
-
-good_GRO =read.delim("GRO_no_TSS_interuptions2.bed", head=F)
-GRO3 <- GRO2[GRO2$UniqueID %in% good_GRO[,4],]
-save(GRO3,file="GRO_with0_Data.RData")
+# Ok, finally going to make this into a function
+GRO3.test=makeGROdata("/home/home/jeremy/RNAseq/Glass/refseq_and_subsequent_transcripts_with_tag_counts.txt", refGene,"GRO_Data_test.RData",1000)
 
 ## Merge with 'mergedData'
 dataWithGRO2 = merge(mergedData, GRO3 , by='UniqueID',all.x=T)
-dataWithGRO2$RunonGroup = splitByVector(dataWithGRO2$Runon,quantile(dataWithGRO2$Runon,na.rm=T,(1:4)/5)) # split into 5 groups
-save(dataWithGRO2,file='dataWithGRO_with0.RData')
+dataWithGRO$RunonGroup = splitByVector(dataWithGRO$Runon,quantile(dataWithGRO$Runon,na.rm=T,(1:4)/5)) # split into 5 groups
+save(dataWithGRO,file='dataWithGRO.RData')
 
-##################################################################################################################
-################### Re-plotting the first figure at least.  I should probably redo the simulation then, if it looks worthwhile!
-png(sprintf('%s_simple6_SplitRunonWith0ImprovementbyOthers3.png',settings$CommonName),height=600,width=1200)
-par(mfrow=c(1,2),cex.axis=1.2,cex=1.3,cex.main=1.1,las=3,mar=c(6.1 ,4.1 ,4.1, 2.1)) ; options(warn=-1) -> W
 
-xlabs = tapply(mergedData$length,mergedData$Group,function(x)paste(range(x),collapse='-'))
-plotSplitsHK(dataWithGRO2,'Runon','Read-Through Length\nAs a function of last exon length',Group='LengthGroup',xlab='',names=xlabs,ylab='')
+### Possible Redo of figures/data for paper:
 
-xlabs = tapply(mergedData$length,mergedData$Group,function(x)paste(range(x),collapse='-'))
-plotSplitsHK(dataWithChromGROpredictions,'PredSplice1','Splicing\nAs a function of last exon length',Group='Group',xlab='',ylab='',names=xlabs,YLIM=c(0.2,0.8))
-plotSplitsHK(dataWithChromGROpredictions,'PredSplice2','',Group='Group',add=T,LTY=2,YLIM=c(0.2,0.8),xlab='Last Exon Length',ylbias=-1)
+# Summary of Runon:
+summary(dataWithGRO$Runon[dataWithGRO$isHK==0])
+summary(dataWithGRO$Runon[dataWithGRO$isHK==1])
 
-options(W); dev.off()
+# Summary of Final total length:
+summary((dataWithGRO$length+dataWithGRO$Runon)[dataWithGRO$isHK==0])
+summary((dataWithGRO$length+dataWithGRO$Runon)[dataWithGRO$isHK==1])
 
+# Summary of lengths that were actually added to the Runon:
+summary(dataWithGRO$length[!is.na(dataWithGRO$Runon)])
 
 
 
+### 12/21/2012
+# Writing a supplemental file of GRO-seq data 
+GRO_out = data.frame(RefSeq=dataWithGRO$sequence_identifier, Gene=dataWithGRO$GeneName,Chr = dataWithGRO$chr, Strand=dataWithGRO$strand.x, PredictedExonLength=dataWithGRO$length,MeasuredExonLength=dataWithGRO$length + dataWithGRO$Runon, 
+ PredictedTerminationLocation=dataWithGRO$end,MeasuredTerminationLocation=dataWithGRO$end + dataWithGRO$Runon*ifelse(dataWithGRO$strand.x=='+',1,-1))
+GRO_out=GRO_out[!is.na(GRO_out[,1]),]
 
+write.delim(GRO_out,'Supplemental_Table_2.txt')
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#plotSplitsHK(dataWithChromGROTime2,'Runon',paste('Read-through distance (bp)','As a function of Estimated time need to splice',sep="\n"),Group='TimeGroup',xlab='',ylab='',names=xlabs)
-#plotSplits(dataWithChromGROTime2,'Runon','',Group='TimeGroup',add=T,type='b',lwd=2)
-#predictSimple1 = plotSplitsHK(dataWithChromGROTime2,'expectedSplicing',paste(NAME1,'As a function of Acceptor Strength of Last Intron',sep="\n"),Group='AcceptorGroup',xlab='',ylab='',names=xlabs)
-#plotSplits(dataWithChromGROTime2,'expectedSplicing','',Group='AcceptorGroup',add=T,type='b',lwd=2)
-#xlabs = tapply(dataWithChromGROTime2$MinutesToSplice,dataWithChromGROTime2$TimeGroup2,function(x)paste(sprintf("%.1f",range(x)),collapse='-'))
-#predictSimple1 = plotSplitsHK(dataWithChromGROTime2,'expectedSplicing',paste(NAME1,'As a function of Estimated time needed to splice',sep="\n"),Group='TimeGroup2',xlab='',ylab='',names=xlabs)
-#plotSplits(dataWithChromGROTime2,'expectedSplicing','',Group='TimeGroup2',add=T,type='b',lwd=2)
-
- 
-#xlabs = tapply(dataWithChromGROTime2$PooledSplicing,dataWithChromGROTime2$SpliceAllGroup,function(x)paste(sprintf("%.2f",range(x)),collapse='-'))
-#predictSimple1 = plotSplitsHK(dataWithChromGROTime2,'expectedSplicing',paste(NAME1,'As a function of Measured Splicing of Last Intron',sep="\n"),Group='SpliceAllGroup',xlab='',ylab='',names=xlabs)
-#plotSplits(dataWithChromGROTime2,'expectedSplicing','',Group='SpliceAllGroup',add=T,type='b',lwd=2)
-#
-#predictSimple2 = plotSplitsHK(dataWithChromGROTime2,'expectedSplicing2',paste(NAME2,'As a function of Measured Splicing of Last Intron',sep="\n"),Group='SpliceAllGroup',xlab='',ylab='',names=xlabs)
-#plotSplits(dataWithChromGROTime2,'expectedSplicing2','',Group='SpliceAllGroup',add=T,type='b',lwd=2)
-
-#predictSimple1 = plotSplitsHK(dataWithChromGROTime2,'expectedSplicing',paste(NAME1,'As a function of Estimated time need to splice',sep="\n"),Group='TimeGroup',xlab='',ylab='',names=xlabs)
-#plotSplits(dataWithChromGROTime2,'expectedSplicing','',Group='TimeGroup',add=T,type='b',lwd=2)
-#
-#predictSimple2 = plotSplitsHK(dataWithChromGROTime2,'expectedSplicing2',paste(NAME2,'As a function of Estimated time need to splice',sep="\n"),Group='TimeGroup',xlab='',ylab='',names=xlabs)
-#plotSplits(dataWithChromGROTime2,'expectedSplicing2','',Group='TimeGroup',add=T,type='b',lwd=2)
-
-#plotSplitsHK(dataWithChromGROTime2,'PooledSplicing','Measured Splicing of Last Intron\nAs a function of expected Splicing group \n(Calculated using length of last exon)',Group='expectedSplicingSimpleGroup',xlab='',ylab='', YLIM=c(0.7,1))
-#plotSplits(dataWithChromGROTime2,'PooledSplicing','',Group='expectedSplicingSimpleGroup',add=T,type='b',lwd=2)
-#
-#plotSplitsHK(dataWithChromGROTime2,'PooledSplicing','Measured Splicing of Last Intron\nAs a function of expected Splicing group \n(Calculated using last exon + Read-through length)',Group='expectedSplicingSimpleGroup2',xlab='',ylab='', YLIM=c(0.7,1))
-#plotSplits(dataWithChromGROTime2,'PooledSplicing','',Group='expectedSplicingSimpleGroup2',add=T,type='b',lwd=2)
-
-#predictSimple1 = plotSplitsHK(dataWithChromGROTime2,'expectedSplicingSimple.Z','Expected Splicing Z score \n(Calculated using length of last exon)\nAs a function of Measured Splicing of Last Intron',Group='SpliceAllGroup',xlab='',ylab='')
-#plotSplits(dataWithChromGROTime2,'expectedSplicingSimple.Z','',Group='SpliceAllGroup',add=T,type='b',lwd=2)
-
-#predictSimple2 = plotSplitsHK(dataWithChromGROTime2,'expectedSplicingSimple2.Z','Expected Splicing Z score\n(Calculated using last exon + Read-through length)\nAs a function of Measured Splicing of Last Intron',Group='SpliceAllGroup',xlab='',ylab='')
-#plotSplits(dataWithChromGROTime2,'expectedSplicingSimple2.Z','',Group='SpliceAllGroup',add=T,type='b',lwd=2)
-# Make bar plot 
-#dat1 = as.matrix(rbind(HK_Low = predictSimple1[[1]][1,], HK_High=predictSimple1[[1]][5,], nonHK_Low = predictSimple1[[2]][1,], nonHK_High=predictSimple1[[2]][5,]))
-#dat2 = as.matrix(rbind(HK_Low = predictSimple2[[1]][1,], HK_High=predictSimple2[[1]][5,], nonHK_Low = predictSimple2[[2]][1,], nonHK_High=predictSimple2[[2]][5,]))
-#barplot(dat1[,1], names=rownames(dat1), main='Version 1',ylab=c("Average Predicted Splicing Z Score")) #,ylim=c(-.4,.4)
-#barplot(dat2[,1], names=rownames(dat2),  main='Version 2',ylab=c("Average Predicted Splicing Z Score"))
-#plotSplitsHK(dataWithChromGROTime2,'PooledSplicing','Measured Splicing of Last Intron\nAs a function of expected Splicing group\n(All introns, splicing Factor=5)',Group='expectedSplicingGroup',xlab='',ylab='')
-#plotSplits(dataWithChromGROTime2,'PooledSplicing','',Group='expectedSplicingGroup',add=T,type='b',lwd=2)
-#plotSplitsHK(dataWithChromGROTime2,'PooledSplicing','Measured Splicing of Last Intron\nAs a function of expected Splicing group\n(All introns, splicing Factor=2)',Group='expectedSplicingGroup2',xlab='',ylab='')
-#plotSplits(dataWithChromGROTime2,'PooledSplicing','',Group='expectedSplicingGroup2',add=T,type='b',lwd=2)
-#plotSplitsHK(dataWithChromGROTime2,'Runon','Length of Read-through\nAs a function of expected Splicing group\n(All introns, splicing Factor=5)',Group='expectedSplicingGroup',xlab='',ylab='')
-#plotSplits(dataWithChromGROTime2,'Runon','',Group='expectedSplicingGroup',add=T,type='b',lwd=2)
-#plotSplitsHK(dataWithChromGROTime2,'Runon','Length of Read-through\nAs a function of expected Splicing group\n(All introns, splicing Factor=2)',Group='expectedSplicingGroup2',xlab='',ylab='')
-#plotSplits(dataWithChromGROTime2,'Runon','',Group='expectedSplicingGroup2',add=T,type='b',lwd=2)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-### Split up based on splicing rates at 0 min:
-#dataWithChromGRO$SpliceGroup0 = splitByVector(dataWithChromGRO$Chromatin_0_min,quantile(dataWithChromGRO$Chromatin_0_min,na.rm=T,(1:4)/5)) # split into 5 groups
-#dataWithChromGRO$SpliceGroup60 = splitByVector(dataWithChromGRO$Chromatin_60_min,quantile(dataWithChromGRO$Chromatin_60_min,na.rm=T,(1:4)/5)) # split into 5 groups
-
-### Split up based on Run-on length
-#dataWithChromGRO$RunonGroup = splitByVector(dataWithChromGRO$Runon,quantile(dataWithChromGRO$Runon,na.rm=T,(1:4)/5)) # split into 5 groups
-#dataWithGRO$FeatureGroup = splitByVector(dataWithGRO$FeatureCount,quantile(dataWithGRO$FeatureCount,na.rm=T,(1:4)/5)) # split into 5 groups
-#dataWithChromGRO$SplicingGroup = splitByVector(dataWithChromGRO$Acceptor,quantile(dataWithChromGRO$Acceptor,na.rm=T,(1:4)/5)) # split into 5 groups
-#dataWithChromGRO$InducedSplicing_30min = dataWithChromGRO$Chromatin_30_min - dataWithChromGRO$Chromatin_0_min
-#dataWithChromGRO$GroupInduced30 = splitByVector(dataWithChromGRO$InducedSplicing_30min,quantile(dataWithChromGRO$InducedSplicing_30min,na.rm=T,(1:4)/5)) # split into 5 groups
-
-
-
-
-#### CHROM_ASSOC:
-
-## First just overall distribution
-chromBoxplot = function(outData,main=''){
-  par(mar=c(5,10,3,1))
-  palette(colorRampPalette(c('white','green'))(8))
-  boxplot(lapply(outData,function(x)x$PercentSpliced),col=2:6,notch=T, las=1,names=samples, horizontal=T,xlab="Fraction of last intron spliced", main=paste(main) )
-}
-
-png("Chrom1.png",width=500,height=300)
-chromBoxplot(outData)
-dev.off()
-             
-png("ChromFiltered.png",width=500,height=300)
-chromBoxplot(lapply(outData, function(x) x[x$SplicedReads + x$UnsplicedReads > 5,]))
-dev.off()
-
-png("ChromFiltered2nds.png",width=500,height=300)
-chromBoxplot(lapply(outData2, function(x) x[x$SplicedReads + x$UnsplicedReads > 5,]))
-dev.off()
-
-png("ChromAll.png",width=500,height=300)
-par(mfrow=c(2,2))
-boxplot(combinedChrom$PercentSpliced[combinedChrom$SplicedReads + combinedChrom$UnsplicedReads > 0],main='All genes',ylab='% spliced') #, function(x) x[x$SplicedReads + x$SplicedReads > 5,]
-boxplot(combinedChrom$PercentSpliced[combinedChrom$SplicedReads + combinedChrom$UnsplicedReads > 10],main='Genes at > 10 reads',ylab='% spliced') #, function(x) x[x$SplicedReads + x$SplicedReads > 5,]
-dev.off()
-
-png(sprintf('%s_CHROMsplits.png',settings$CommonName))
-par(mfrow=c(3,2))
-plotSplitsHK(dataWithChrom,'Chromatin_0_min','Chrom-Splicing @ 0 min')
-plotSplitsHK(dataWithChrom,'Chromatin_15_min',"Chrom-Splicing @ 15 min")
-plotSplitsHK(dataWithChrom,'Chromatin_30_min',"Chrom-Splicing @ 30 min")
-plotSplitsHK(dataWithChrom,'Chromatin_60_min',"Chrom-Splicing @ 60 min")
-plotSplitsHK(dataWithChrom,'Chromatin_120_min',"Chrom-Splicing @ 120 min")
-dev.off()
-
-
-
-#### Try to find genes that change their splicing patterns
-source("/home/jeremy/useful_R.r")
-png("Chrom_Heatmap1.png")
-D = data.matrix(dataWithChrom[dataWithChrom$isHK==0,15:18]) # Get rid of housekeeping genes
-D = D[apply(D,1,function(x)!any(is.na(x))),]  # Get rid of any rows that have at least one NA
-D = D[rowMins(D) < 0.9,]  # Get rid of genes that always have 100% splicing
-heatmap1(D,Rowv=TRUE,main="Splicing of last intron in Chromatin-associated RNA")
-dev.off()
-
-
-
-## Split splicing data into 'Extreme' Categories!!! 
-
-pdf("Mouse_Chrom_Boxplots1.pdf",height=3,width=6)
-par(mfrow=c(1,3),las=2)
-boxplot(Chromatin_30_min ~ AcceptorGroup + isHK,data= dataWithChrom, col=tenCols, main='Acceptor Strength\n',xaxt='n')
-boxplot(Chromatin_30_min ~ EnergyGroup + isHK,data= dataWithChrom, col=tenCols, main='Nucleosome Stability\n',xaxt='n')
-boxplot(Chromatin_30_min ~ LengthGroup + isHK,data= dataWithChrom, col=tenCols, main='Exon Length\n',xaxt='n')
-dev.off()
-
-### Chrom 30 min versus Feature Counts:
-dataWithChrom$FeatureGroup = splitByVector(dataWithChrom$FeatureCount,quantile(dataWithChrom$FeatureCount,na.rm=T,(1:4)/5)) # split into 5 groups
-
-pdf("Mouse_Chrom_Boxplots2.pdf",height=3,width=6)
-par(mfrow=c(1,3),las=2)
-boxplot(Chromatin_30_min ~ FeatureGroup + isHK,data= dataWithChrom, col=tenCols, main='Number of Introns\n',xaxt='n')
-#boxplot(Chromatin_30_min ~ EnergyGroup + isHK,data= dataWithChrom, col=tenCols, main='Nucleosome Stability\n',xaxt='n')
-#boxplot(Chromatin_30_min ~ LengthGroup + isHK,data= dataWithChrom, col=tenCols, main='Exon Length\n',xaxt='n')
-dev.off()
-
-### Extreme doesn't work that well because low sample size
-#dataWithChrom.extreme = dataWithChrom[dataWithChrom$AcceptorGroup %in% c(1,5) & dataWithChrom$EnergyGroup %in% c(1,5) & dataWithChrom$LengthGroup %in% c(1,5)  ,]
-#png("Mouse_Chrom_extreme2.png",height=800,width=566)
-#par(mfrow=c(2,2),las=2)
-#boxplot(Chromatin_30_min ~ AcceptorGroup + isHK,data= dataWithChrom[dataWithChrom$LengthGroup < 2, ], col=tenCols, main='Short Last exons: \nIncreasing Acceptor Strength')
-#boxplot(Chromatin_30_min ~ EnergyGroup + isHK,data= dataWithChrom[dataWithChrom$LengthGroup < 2, ], col=tenCols, main='Short Last exons: \nIncreasing Nuclseosome Stability')
-#boxplot(Chromatin_30_min ~ AcceptorGroup + isHK,data= dataWithChrom[dataWithChrom$LengthGroup > 4, ], col=tenCols, main='Long Last exons: \nIncreasing Acceptor Strength')
-#boxplot(Chromatin_30_min ~ EnergyGroup + isHK,data= dataWithChrom[dataWithChrom$LengthGroup > 4, ], col=tenCols, main='Long Last exons: \nIncreasing Nuclseosome Stability')
-#dev.off()
-
-
-
-
-#### Do some genes CHANGE their splicing upon stimulation?  ####
-
-png(sprintf('%s_ChromChanges.png',settings$CommonName))
-par(mfrow=c(2,2))
-boxplot(Chromatin_15_min - Chromatin_0_min ~ isHK,  data=dataWithChrom,col=tenCols[5:6],main='Change in Splicing Rate: 15 min - basal',ylab='Change in % spliced', notch=T)
-boxplot(Chromatin_30_min - Chromatin_0_min ~ isHK,  data=dataWithChrom,col=tenCols[5:6],main='Change in Splicing Rate: 30 min - basal',ylab='Change in % spliced', notch=T)
-boxplot(Chromatin_60_min - Chromatin_0_min ~ isHK,  data=dataWithChrom,col=tenCols[5:6],main='Change in Splicing Rate: 60 min - basal',ylab='Change in % spliced', notch=T)
-boxplot(Chromatin_120_min - Chromatin_0_min ~ isHK,  data=dataWithChrom,col=tenCols[5:6],main='Change in Splicing Rate: 120 min - basal',ylab='Change in % spliced', notch=T)
-dev.off()
- 
-cutoff = 0.8
-frac = function(x)length(which(x))/length(x)
-#F=sapply(15:19, function(i) 	c(frac(dataWithChrom[dataWithChrom$isHK==0,i] > cutoff), frac(dataWithChrom[dataWithChrom$isHK==1,i] > cutoff)))
-
-
-
-png(sprintf('%s_GROsplits.png',settings$CommonName))
-par(mfrow=c(2,2))
-plotSplitsHK(mergedData,'Energy','Nucleosome Stability')
-plotSplitsHK(mergedData,'Donor',"5' splice site strength")
-plotSplitsHK(mergedData,'Acceptor',"3' splice site strength")
-plotSplitsHK(dataWithGRO,'Runon',"Run-on Length")
-dev.off()
-
-
-
- 
-png(sprintf('%s_splits2_by_0min.png',settings$CommonName))
-par(mfrow=c(2,3))
-plotSplitsHK(dataWithChromGRO,'length','Length',Group='SpliceGroup0')
-plotSplitsHK(dataWithChromGRO,'Energy','Nucleosome Stability',Group='SpliceGroup0')
-plotSplitsHK(dataWithChromGRO,'Donor',"5' splice site strength",Group='SpliceGroup0')
-plotSplitsHK(dataWithChromGRO,'Acceptor',"3' splice site strength",Group='SpliceGroup0')
-plotSplitsHK(dataWithChromGRO,'Runon',"Run-on Length",Group='SpliceGroup0')
-dev.off()
-png(sprintf('%s_splits2_by_60min.png',settings$CommonName))
-par(mfrow=c(2,3))
-plotSplitsHK(dataWithChromGRO,'length','Length',Group='SpliceGroup60')
-plotSplitsHK(dataWithChromGRO,'Energy','Nucleosome Stability',Group='SpliceGroup60')
-plotSplitsHK(dataWithChromGRO,'Donor',"5' splice site strength",Group='SpliceGroup60')
-plotSplitsHK(dataWithChromGRO,'Acceptor',"3' splice site strength",Group='SpliceGroup60')
-plotSplitsHK(dataWithChromGRO,'Runon',"Run-on Length",Group='SpliceGroup60')
-dev.off()
-
-
-
-
-png(sprintf('%s_splits2_by_Runon.png',settings$CommonName),height=800,width=800)
-par(mfrow=c(3,3))
-plotSplitsHK(dataWithChromGRO,'length','Length',Group='RunonGroup')
-plotSplitsHK(dataWithChromGRO,'Energy','Nucleosome Stability',Group='RunonGroup')
-plotSplitsHK(dataWithChromGRO,'Donor',"5' splice site strength",Group='RunonGroup')
-plotSplitsHK(dataWithChromGRO,'Acceptor',"3' splice site strength",Group='RunonGroup')
-plotSplitsHK(dataWithChromGRO,'Chromatin_0_min',"Splicing 0 min",Group='RunonGroup')
-plotSplitsHK(dataWithChromGRO,'Chromatin_15_min',"Splicing 15 min",Group='RunonGroup')
-plotSplitsHK(dataWithChromGRO,'Chromatin_30_min',"Splicing 30 min",Group='RunonGroup')
-plotSplitsHK(dataWithChromGRO,'Chromatin_60_min',"Splicing 60 min",Group='RunonGroup')
-plotSplitsHK(dataWithChromGRO,'Chromatin_120_min',"Splicing 120 min",Group='RunonGroup')
-dev.off() 
-
-png(sprintf('%s_splits3_by_Runon.png',settings$CommonName),height=800,width=800)
-par(mfrow=c(3,3))
-plotSplitsHK(dataWithChromGRO,'Chromatin_0_min',"Splicing 0 min",Group='RunonGroup')
-plotSplitsHK(dataWithChromGRO,'Chromatin_15_min',"Splicing 15 min",Group='RunonGroup')
-plotSplitsHK(dataWithChromGRO,'Chromatin_30_min',"Splicing 30 min",Group='RunonGroup')
-plotSplitsHK(dataWithChromGRO,'Chromatin_60_min',"Splicing 30 min",Group='RunonGroup')
-plotSplitsHK(dataWithGRO,'length','Length',Group='RunonGroup')
-plotSplitsHK(dataWithGRO,'Energy','Nucleosome Stability',Group='RunonGroup')
-plotSplitsHK(dataWithGRO,'Acceptor',"3' splice site strength",Group='RunonGroup')
-plotSplitsHK(dataWithGRO,'FeatureCount',"Number of Introns",Group='RunonGroup')
-plotSplitsHK(dataWithGRO,'Runon',"Runon-Length vs number of introns",Group='FeatureGroup')
-dev.off() 
-
-
-png(sprintf('%s_splits4_by_Runon.png',settings$CommonName),height=800,width=800)
-par(mfrow=c(2,2))
-boxplot(Runon ~ isHK, data=dataWithGRO,col=tenCols[5:6],main='Runon Length',ylab='bp', notch=T)
-boxplot(Chromatin_0_min ~ isHK, data=dataWithChrom,col=tenCols[5:6],main='Splicing Rate - 0 min',ylab='% spliced', notch=T)
-boxplot(Chromatin_15_min ~ isHK, data=dataWithChrom,col=tenCols[5:6],main='Splicing Rate - 15 min',ylab='% spliced', notch=T)
-boxplot(Chromatin_30_min ~ isHK, data=dataWithChrom,col=tenCols[5:6],main='Splicing Rate - 30 min',ylab='% spliced', notch=T)
-#plotSplitsHK(dataWithGRO,'length','Length',Group='RunonGroup')
-dev.off() 
-
-
-png(sprintf('%s_splits2_by_Length.png',settings$CommonName),height=600,width=600)
-par(mfrow=c(3,3))
-plotSplitsHK(dataWithChromGRO,'Runon','Run-on Length',Group='Group')
-plotSplitsHK(dataWithChromGRO,'Energy','Nucleosome Stability',Group='Group')
-plotSplitsHK(dataWithChromGRO,'Donor',"5' splice site strength",Group='Group')
-plotSplitsHK(dataWithChromGRO,'Acceptor',"3' splice site strength",Group='Group')
-plotSplitsHK(dataWithChromGRO,'Chromatin_0_min',"Splicing 0 min",Group='Group')
-plotSplitsHK(dataWithChromGRO,'Chromatin_15_min',"Splicing 15 min",Group='Group')
-plotSplitsHK(dataWithChromGRO,'Chromatin_30_min',"Splicing 30 min",Group='Group')
-plotSplitsHK(dataWithChromGRO,'Chromatin_60_min',"Splicing 60 min",Group='Group')
-plotSplitsHK(dataWithChromGRO,'Chromatin_120_min',"Splicing 120 min",Group='Group')
-dev.off() 
-
-### Split up based on 3' splice site strength
-png(sprintf('%s_splits2_by_Splicing3.png',settings$CommonName),height=800,width=800)
-par(mfrow=c(3,3))
-plotSplitsHK(dataWithChromGRO,'length','Length',Group='SplicingGroup')
-plotSplitsHK(dataWithChromGRO,'Energy','Nucleosome Stability',Group='SplicingGroup')
-plotSplitsHK(dataWithChromGRO,'Donor',"5' splice site strength",Group='SplicingGroup')
-plotSplitsHK(dataWithChromGRO,'Runon',"Runon Length",Group='SplicingGroup')
-plotSplitsHK(dataWithChromGRO,'Chromatin_0_min',"Splicing 0 min",Group='SplicingGroup')
-plotSplitsHK(dataWithChromGRO,'Chromatin_15_min',"Splicing 15 min",Group='SplicingGroup')
-plotSplitsHK(dataWithChromGRO,'Chromatin_30_min',"Splicing 30 min",Group='SplicingGroup')
-plotSplitsHK(dataWithChromGRO,'Chromatin_60_min',"Splicing 60 min",Group='SplicingGroup')
-plotSplitsHK(dataWithChromGRO,'Chromatin_120_min',"Splicing 120 min",Group='SplicingGroup')
-dev.off() 
-
-
-### Split up based on Induced GRO (30 min)
-png(sprintf('%s_splits2_by_30minInduction.png',settings$CommonName),height=800,width=800)
-par(mfrow=c(2,3))
-plotSplitsHK(dataWithChromGRO,'length','Length',Group='GroupInduced30')
-plotSplitsHK(dataWithChromGRO,'Energy','Nucleosome Stability',Group='GroupInduced30')
-plotSplitsHK(dataWithChromGRO,'Donor',"5' splice site strength",Group='GroupInduced30')
-plotSplitsHK(dataWithChromGRO,'Acceptor',"3' splice site strength",Group='GroupInduced30')
-plotSplitsHK(dataWithChromGRO,'Runon',"Runon Length",Group='GroupInduced30')
-dev.off()
-
-
-
-############# ############# ############# ############# ############# ############# 
-############# LINEAR MODELS TO PREDICT SPLICING EFFICIENCY #############################
-## LMs for splicing
-for (HK in 0:1){
-  cat(sprintf("\n\n**************** Showing linear models for HK == %d\n\n",HK))
-  print(summary(lm(Chromatin_0_min ~ log10(length) + Energy + log10(Acceptor)  ,  data=dataWithChromGRO[dataWithChromGRO$isHK==HK,])))
-  print(summary(lm(Chromatin_15_min ~ log10(length) + Energy + log10(Acceptor)  ,  data=dataWithChromGRO[dataWithChromGRO$isHK==HK,])))
-  print(summary(lm(Chromatin_30_min ~ log10(length) + Energy + log10(Acceptor) ,  data=dataWithChromGRO[dataWithChromGRO$isHK==HK,])))
-  print(summary(lm(Chromatin_60_min ~ log10(length) + Energy + log10(Acceptor) ,  data=dataWithChromGRO[dataWithChromGRO$isHK==HK,])))
-  print(summary(lm(Chromatin_120_min ~ log10(length) + Energy + log10(Acceptor)  ,  data=dataWithChromGRO[dataWithChromGRO$isHK==HK,])))
-}
-
-## Lms for INDUCED splicing changes
-for (HK in list(0,1,0:1)){
-  cat(sprintf("\n\n**************** Showing linear models for HK == %d\n\n",HK))
-  print(summary(lm(Chromatin_15_min / Chromatin_0_min ~ log10(length) + Energy + log10(Acceptor)  ,  data=dataWithChromGRO[dataWithChromGRO$isHK %in% HK,])))
-  print(summary(lm(Chromatin_30_min / Chromatin_0_min ~ log10(length) + Energy + log10(Acceptor)  ,  data=dataWithChromGRO[dataWithChromGRO$isHK %in% HK,])))
-  print(summary(lm(Chromatin_60_min / Chromatin_0_min ~ log10(length) + Energy + log10(Acceptor)  ,  data=dataWithChromGRO[dataWithChromGRO$isHK %in% HK,])))
-  print(summary(lm(Chromatin_120_min / Chromatin_0_min ~ log10(length) + Energy + log10(Acceptor)  ,  data=dataWithChromGRO[dataWithChromGRO$isHK %in% HK,])))
-}
-############# ############# ############# ############# ############# 
- 
-
-
-############# ############# ############# ############# ############# ############# ############# 
-###  Try some boxplots
-############# ############# ############# ############# ############# ############# ############# 
-
-png(sprintf('%s_Chrom_Boxplot_byLength.png',settings$CommonName),height=800,width=800)
-par(mfrow=c(2,3),las=3)
-boxplot(Chromatin_0_min ~ Group + isHK,data=dataWithChrom, main="0 min",xlab="Length Groups",ylab="% spliced", col = c(rep(rgb(.5,.5,1),5), rep(rgb(1,.5,.5),5)))
-boxplot(Chromatin_15_min ~ Group+ isHK,data=dataWithChrom,main="15 min",xlab="Length Groups",ylab="% spliced", col = c(rep(rgb(.5,.5,1),5), rep(rgb(1,.5,.5),5)))
-boxplot(Chromatin_30_min ~ Group+ isHK,data=dataWithChrom, main="30 min",xlab="Length Groups",ylab="% spliced", col = c(rep(rgb(.5,.5,1),5), rep(rgb(1,.5,.5),5)))
-boxplot(Chromatin_60_min ~ Group+ isHK,data=dataWithChrom, main="60 min",xlab="Length Groups",ylab="% spliced", col = c(rep(rgb(.5,.5,1),5), rep(rgb(1,.5,.5),5)))
-boxplot(Chromatin_120_min ~ Group+ isHK,data=dataWithChrom, main="120 min",xlab="Length Groups",ylab="% spliced", col = c(rep(rgb(.5,.5,1),5), rep(rgb(1,.5,.5),5)))
-dev.off()
-
-png(sprintf('%s_Chrom_Boxplot_byRunon.png',settings$CommonName),height=800,width=800)
-par(mfrow=c(2,3),las=3)
-boxplot(Chromatin_0_min ~ RunonGroup + isHK,data=dataWithChromGRO, main="0 min",xlab="Length Groups",ylab="% spliced", col = c(rep(rgb(.5,.5,1),5), rep(rgb(1,.5,.5),5)))
-boxplot(Chromatin_15_min ~ RunonGroup+ isHK,data=dataWithChromGRO,main="15 min",xlab="Length Groups",ylab="% spliced", col = c(rep(rgb(.5,.5,1),5), rep(rgb(1,.5,.5),5)))
-boxplot(Chromatin_30_min ~ RunonGroup+ isHK,data=dataWithChromGRO, main="30 min",xlab="Length Groups",ylab="% spliced", col = c(rep(rgb(.5,.5,1),5), rep(rgb(1,.5,.5),5)))
-boxplot(Chromatin_60_min ~ RunonGroup+ isHK,data=dataWithChromGRO, main="60 min",xlab="Length Groups",ylab="% spliced", col = c(rep(rgb(.5,.5,1),5), rep(rgb(1,.5,.5),5)))
-boxplot(Chromatin_120_min ~ RunonGroup+ isHK,data=dataWithChromGRO, main="120 min",xlab="Length Groups",ylab="% spliced", col = c(rep(rgb(.5,.5,1),5), rep(rgb(1,.5,.5),5)))
-dev.off()
-
-
-
-############# ############# ############# ############# ############# ############# ############# 
-## Heatmap of correlations between features
-############# ############# ############# ############# ############# ############# ############# 
-
-f= function(Matrix){
-	CC <- cor(Matrix,use='c')
-	CC[CC==1] <- 0
-	CC
-}
-
-pdf("HeatmapFactors1.pdf")
-
-heatmap.2(f(dataWithChromGRO[,c(9:12,14,17,20)]),Rowv=T, main="All Genes",Colv=T,trace='n')
-heatmap.2(f(dataWithChromGRO[dataWithChromGRO$isHK==0, c(9:12,17,20)]), Rowv=T, main="Inducible Genes",Colv=T,trace='n')
-heatmap.2(f(dataWithChromGRO[dataWithChromGRO$isHK==1, c(9:12,17,20)]), Rowv=T, main="HK genes",Colv=T,trace='n')
-heatmap.2(f(dataWithChromGRO[,c(9:12,14,17,20)]),Rowv=F, main="All Genes",Colv=F,trace='n')
-heatmap.2(f(dataWithChromGRO[dataWithChromGRO$isHK==0, c(9:12,17,20)]), Rowv=F, main="Inducible Genes",Colv=F,trace='n')
-heatmap.2(f(dataWithChromGRO[dataWithChromGRO$isHK==1, c(9:12,17,20)]), Rowv=F, main="HK genes",Colv=F,trace='n')
-dev.off()
-
-############# ############# ############# ############# ############# ############# ############# 
-############# Principle components and analysis                                     ############# 
-############# ############# ############# ############# ############# ############# ############# 
-
-prcomp(~ length + Energy + Acceptor + FeatureCount + PooledSplicing + Runon,data=dataWithChromGRO, scale=TRUE)->PC 
-prcomp(~ length + Energy + Acceptor  + PooledSplicing,data=dataWithChromGRO, scale=TRUE)->PC2 
-
-matrixNON = PC$x[rownames(PC$x) %in% rownames(dataWithChromGRO)[dataWithChromGRO$isHK==0],]
-matrixHK = PC$x[rownames(PC$x) %in% rownames(dataWithChromGRO)[dataWithChromGRO$isHK==1],]
-        
-distNON = dist(matrixNON)
-distHK  = dist(matrixHK)
-
-clustNON = hclust(distNON)
-clustHK = hclust(distHK)
-
-dendroNON = as.dendrogram(clustNON)
-dendroHK = as.dendrogram(clustHK)
-
-### Order by tree then sort by one of the columns
-#orderClusters = function(myTree, myData, column){
-#  outOrder = which(my
-  
-#  for (i in 1:max(myTree)){
-#    temp.data = 
-  
-#  }
-#}
-
-library(dynamicTreeCut)
-treeNON = cutreeDynamic(clustNON,distM=as.matrix(distNON),deepSplit=0)
-treeHK= cutreeDynamic(clustHK,distM=as.matrix(distHK),deepSplit=0)
-
-pdf("PC_heatmaps.pdf")
-heatmap1(matrixNON,main='Non HK genes', maxVal=5, Rowv=dendroNON, RowSideColors=as.character(treeNON),dendrogram='row')
-heatmap1(matrixHK,main='HK genes', maxVal=5 ,  Rowv=dendroHK,RowSideColors=as.character(treeHK),dendrogram='row')
-dev.off()
-pdf("PC_heatmaps2.pdf")
-heatmap1(matrixNON,main='Non HK genes', maxVal=5, Rowv=dendroNON, RowSideColors=as.character(treeNON),dendrogram='none')
-heatmap1(matrixHK,main='HK genes', maxVal=5 ,  Rowv=dendroHK,RowSideColors=as.character(treeHK),dendrogram='none')
-dev.off()
-
-
-
-
-
-
+#In the abstract we say that we have a database of termination sites.
+#So maybe we should also show the location in the genome where we measure the termination site to be.

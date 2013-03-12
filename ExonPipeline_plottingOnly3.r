@@ -100,3 +100,40 @@ plotSplitsHK(mergedData,'FeatureCount',"Number of Exons in Gene\nAs a function o
 plotSplits(mergedData,'FeatureCount','',add=T,type='b',lwd=2,Group='LengthGroup')
 #
 dev.off()
+
+
+### Do with medians
+png(sprintf('%s_simple_splitByLength3_Median.png',settings$CommonName),height=1200,width=400)
+par(mfrow=c(3,1),cex.axis=1.2,cex=1.3,cex.main=1.1,las=3,mar=c(6.1 ,4.1 ,4.1, 2.1))
+
+xlabs = tapply(mergedData$length,mergedData$Group,function(x)paste(range(x),collapse='-'))
+
+plotSplitsHK(mergedData,'Energy','Nucleosome Stability\nAs a function of last exon length',names=xlabs,avg='median',ylab='Energy Z Score',xlab='')
+plotSplits(mergedData,'Energy','',avg='median',add=T,type='b',lwd=2)
+# 
+plotSplitsHK(mergedData,'Acceptor',"3' splice site strength\nAs a function of last exon length",avg='median',names=xlabs, ylab='Splicing Z Score',xlab='')
+plotSplits(mergedData,'Acceptor','',avg='median',add=T,type='b',lwd=2)
+#
+
+plotSplitsHK(mergedData,'FeatureCount',"Number of Exons in Gene\nAs a function of last exon length",avg='median',names=xlabs,ylab='# Exons',xlab='')
+plotSplits(mergedData,'FeatureCount','',avg='median',add=T,type='b',lwd=2)
+#
+dev.off()
+
+## SPLIT BY LENGTH GROUP, which is by length quintiles
+png(sprintf('%s_simple_splitByLengthGroup_Median3.png',settings$CommonName),height=1200,width=400)
+par(mfrow=c(3,1),cex.axis=1.2,cex=1.3,cex.main=1.1,las=3,mar=c(6.1 ,4.1 ,4.1, 2.1))
+
+xlabs = tapply(mergedData$length,mergedData$LengthGroup,function(x)paste(range(x),collapse='-'))
+
+plotSplitsHK(mergedData,'Energy','Nucleosome Stability\nAs a function of last exon length',avg='median',Group='LengthGroup',names=xlabs,ylab='Energy Score',xlab='')
+plotSplits(mergedData,'Energy','',add=T,type='b',lwd=2,Group='LengthGroup',avg='median',xaxt='n')
+# 
+plotSplitsHK(mergedData,'Acceptor',"3' splice site strength\nAs a function of last exon length",Group='LengthGroup',avg='median',names=xlabs, ylab='PWM Score',xlab='')
+plotSplits(mergedData,'Acceptor','',add=T,type='b',lwd=2,avg='median',Group='LengthGroup')
+#
+
+plotSplitsHK(mergedData,'FeatureCount',"Number of Exons in Gene\nAs a function of last exon length",avg='median',Group='LengthGroup',names=xlabs,ylab='# Exons',xlab='')
+plotSplits(mergedData,'FeatureCount','',add=T,type='b',lwd=2,avg='median',Group='LengthGroup')
+#
+dev.off()

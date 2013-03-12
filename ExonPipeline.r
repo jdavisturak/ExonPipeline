@@ -34,7 +34,7 @@ saveData(settings)#,file='settings.RData')
                                                
 #source("/home/jeremy/ExonPipeline/ExonPipeline_plottingOnly.r")
 #source("/home/jeremy/ExonPipeline/ExonPipeline_plottingOnly2.r")
-source("/home/jeremy/ExonPipeline/ExonPipeline_plottingOnly3.r")
+source("/home/jeremy/ExonPipeline/ExonPipeline_plottingOnly4.r")
 
 #settings = computeSpliceSiteStrength2(settings,features,genome)
 #saveData(settings)#,file='settings.RData')

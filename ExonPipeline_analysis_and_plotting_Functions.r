@@ -27,30 +27,37 @@ formatData = function(dat){
 
 
 ##### Function to make ONE set of boxplots
-makeBoxplot = function(DATA, mainText ='', doLog=F){
+makeBoxplot = function(DATA, mainText ='',doLog=F,NAMES=c('Non-last','last'), addStats=T,at=NULL,labels=NULL,notch=T, ...){
   if (doLog){
     DATA[,1] = log10(DATA[,1])
   }
+  yaxt = ifelse(is.null(at),'y','n'); # Don't plot the axis if user supplied a value for 'at'
+  main = ifelse(addStats,paste(mainText,lmText(DATA,FALSE),sep="\n"),mainText) # if addStats is set to TRUE, add the lmText() data
   
-  boxplot(Value ~ isLast, data = DATA,main=paste(mainText,lmText(DATA,FALSE),sep="\n"),names=c('Non-last','last'),notch=T)
+  boxplot(Value ~ isLast, data = DATA,main=main,yaxt=yaxt,names=NAMES,notch=notch, ...)
+ 
+  # Possibly label the yticks 
+  if(!is.null(at)) axis(2,at=at,lab=labels)
 }   
 
 
 ##### Function to make ONE set of barplots
-makeBarplot = function(DATA, mainText ='', doLog=F, ...){
+makeBarplot = function(DATA, mainText ='', doLog=F, YLIM=NULL, addStats=TRUE,errorcol='black', ...){
 
   if (doLog){
     DATA[,1] = log10(DATA[,1])
   }
 
   stats = getStats(DATA[,1],DATA[,2])  
-  YLIM = c(0, max(rowSums(stats))*1.2)
-  
-  x=barplot(stats[,1],main=paste(mainText,lmText(DATA,FALSE),sep="\n"),names=c('Non-last','last'),...)
-  #plotCI(x=x,stats[,1],uiw=stats[,2],add=T,barcol='red',lwd=5,col=NULL,sfrac=5) ## Add error bars
-  arrows(x,stats[,1],x,stats[,1]+stats[,2],angle=90,length=0.15,lwd=2);
-  arrows(x,stats[,1],x,stats[,1]-stats[,2],angle=90,length=0.15,lwd=2);
 
+  if(is.null(YLIM)) YLIM = c(0, max(rowSums(stats[,1:2]))*1.2)
+  
+  if(addStats) mainText=paste(mainText,lmText(DATA,FALSE),sep="\n")
+
+  x=barplot(stats[,1], main=mainText, names=c('Non-last','last'), ylim=YLIM,...)
+  arrows(x,stats[,1],x,stats[,1]+stats[,2],angle=90,length=0.15,col=errorcol,lwd=2);
+  arrows(x,stats[,1],x,stats[,1]-stats[,2],angle=90,length=0.15,col=errorcol,lwd=2);
+  abline(h=0,lty=2)
 }
 
 
@@ -140,39 +147,42 @@ getStats = function(dat,group,doPrint=TRUE){
 
 
   means = tapply(dat,group,mean,na.rm=T)
+  medians = tapply(dat,group, median, na.rm=T)
   SEM = tapply(dat,group,function(x)sd(x,na.rm=T)/sqrt(length(which(!is.na(x)))))  
-  data.frame(means,SEM)  
+  data.frame(means,SEM,medians)  
 }
 
 ############## Function to plot binned data
 
-plotSplits = function(dat,column,main,Group='Group',...){
+plotSplits = function(dat,column,main,Group='Group',avg='mean',...){
   require(gplots)
   stats = getStats(dat[,column],dat[,Group])  
-  plotCI(stats$mean,uiw=stats$SEM, main=main,...)
+  plotCI(stats[,ifelse(avg=='mean',1,3)],uiw=stats$SEM, main=main,...)
 }
 
 
 ################################################
 
 ##### Function to divide in 2 by a HK status, then plot twice for HK vs Non
-plotSplitsHK = function(dat,column,main,Group='Group',names=NULL, YLIM=NULL, LTY=1,...){
+plotSplitsHK = function(dat,column,main,Group='Group',names=NULL, YLIM=NULL, LTY=1,avg='mean',colors=c('red','blue'), lwd=2,sfrac=0.02,...){
   require(gplots)
   statsHK = getStats(dat[dat$isHK==1,column],dat[dat$isHK==1,Group])  
   statsNon = getStats(dat[dat$isHK==0, column],dat[dat$isHK==0,Group])
-  xaxt=ifelse(is.null(names),'s','n') 
+  xaxt=ifelse(is.null(names),'s','n')
+   
+  avgCol = ifelse(avg=='mean',1,3); # This uses column 1 for mean, 3 for median
   
   if(is.null(YLIM)){
-	  YLIM <- c(min(c(min(statsNon[,1]-statsNon[,2]),min(statsHK[,1]-statsHK[,2]))), max(c(rowSums(statsHK),rowSums(statsNon))))
+	  YLIM <- c(min(c(min(statsNon[,avgCol]-statsNon[,2]),min(statsHK[,avgCol]-statsHK[,2]))), max(c(max(statsNon[,avgCol]+statsNon[,2]),max(statsHK[,avgCol]+statsHK[,2]))))
   }  
     
-  lwd=2; type='l';col1='red';col2='blue'
-  plotCI(statsHK$mean,uiw=statsHK$SEM, main=main,ylim=YLIM,type='p',lwd=lwd,col=col1,barcol=col1,xaxt=xaxt,...)
+  type='l';col1=colors[1]; col2=colors[2];
+  plotCI(statsHK[,avgCol],uiw=statsHK$SEM, main=main,ylim=YLIM,type='n',lwd=lwd,col=col1,barcol=col1,xaxt=xaxt,gap=0,sfrac=sfrac,labels='',...)
   par(new=T)
-  plotCI(statsNon$mean,uiw=statsNon$SEM, ylim=YLIM,lwd=lwd,type='p',col=col2,barcol=col2,xaxt='n',xlab='',ylab='',yaxt='n')
+  plotCI(statsNon[,avgCol],uiw=statsNon$SEM, ylim=YLIM,lwd=lwd,type='n',col=col2,barcol=col2,xaxt='n',xlab='',ylab='',yaxt='n',gap=0,labels='',sfrac=sfrac)
   if(type=='l' | type=='b'){
-    lines(statsHK$mean,uiw=statsHK$SEM,ylim=YLIM,lwd=lwd,col=col1,xaxt='n',xlab='',ylab='',yaxt='n', lty=LTY)
-    lines(statsNon$mean,uiw=statsNon$SEM,ylim=YLIM,lwd=lwd,col=col2,xaxt='n',xlab='',ylab='',yaxt='n', lty=LTY)
+    lines(statsHK[,avgCol],uiw=statsHK$SEM,ylim=YLIM,lwd=lwd,col=col1,xaxt='n',xlab='',ylab='',yaxt='n', lty=LTY)
+    lines(statsNon[,avgCol],uiw=statsNon$SEM,ylim=YLIM,lwd=lwd,col=col2,xaxt='n',xlab='',ylab='',yaxt='n', lty=LTY)
   }
   
   
@@ -182,4 +192,25 @@ plotSplitsHK = function(dat,column,main,Group='Group',names=NULL, YLIM=NULL, LTY
 
   invisible(list(statsHK = statsHK, statsNon = statsNon))
   
+}
+
+
+plotFig4Like = function(DATA,name,group,main, AVG = 'median'){
+  png(sprintf('%s%s.png',settings$CommonName,name),height=1200,width=1200)
+  par(mfrow=c(2,2),cex.axis=1.2,cex=1.3,cex.main=1.1,las=3,mar=c(6.1 ,4.1 ,4.1, 2.1)) ; options(warn=-1) -> W
+  xlabs = tapply(mergedData$length,mergedData$Group,function(x)paste(range(x),collapse='-'))
+  
+  plotSplitsHK(DATA,'PredSplice_strength',sprintf('CTS efficiency when modulating splicing rates\nAs a function of %s',main),avg=AVG,Group=group,xlab='',ylab='',names=xlabs,YLIM=c(0.0,1))
+  plotSplitsHK(DATA,'PredSplice','',Group=group,add=T,LTY=2,YLIM=c(0.0,1),xlab='Last Exon Length',avg=AVG,ylbias=-1)
+  
+  plotSplitsHK(DATA,'PredSplice_pause',sprintf('CTS efficiency when modulating pausing rate in last exon\nAs a function of %s',main),avg=AVG,Group=group,xlab='',ylab='',names=xlabs,YLIM=c(0.0,1))
+  plotSplitsHK(DATA,'PredSplice','',Group=group,add=T,LTY=2,YLIM=c(0.0,1),xlab='Last Exon Length',avg=AVG,ylbias=-1)
+  
+  plotSplitsHK(DATA,'PredSplice_runon',sprintf('CTS efficiency when adding Read-through rates\nAs a function of %s',main),avg=AVG,Group=group,xlab='',ylab='',names=xlabs,YLIM=c(0.0,1))
+  plotSplitsHK(DATA,'PredSplice','',Group=group,add=T,LTY=2,YLIM=c(0.0,1),xlab='Last Exon Length',avg=AVG,ylbias=-1)
+  
+  plotSplitsHK(DATA,'PredSplice_ALL',sprintf('CTS efficiency when adding all features\n(converstion Factors %s)\nAs a function of %s',conversionFactor, main),avg=AVG,Group=group,xlab='',ylab='',names=xlabs,YLIM=c(0.0,1))
+  plotSplitsHK(DATA,'PredSplice','',Group=group,add=T,LTY=2,YLIM=c(0.0,1),xlab='Last Exon Length',avg=AVG,ylbias=-1)
+                   
+  options(W); dev.off() 
 }

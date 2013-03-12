@@ -1035,14 +1035,23 @@ calculateExpectedTime_MATLAB = function(inFile,elongation_rate=3000,splicingFact
 ########################################################################################################################################
 ### This function runs a matlab model to calculate the % splicing of all genes with Runon data
 ########################################################################################################################################
-calculateSplicingRunon_MATLAB = function(inFile,elongation_rate=3000,k_unpause=30,conversionString ='0.5,5,30,150'){
+calculateSplicingRunon_MATLAB = function(inFile,elongation_rate=3000,k_unpause=30,conversionString ='0.5,5,30,150',VERSION=1){
 
 	# Write a tiny matlab script
-	write.table(sprintf("run /home/jeremy/startup.m\n[IDs ReadTimes] = run_genomic_withRunon('%s/%s',%f,%f,'%s');",getwd(),inFile,elongation_rate,k_unpause,conversionString),file='tmp.matlab.m',quote=F,row.names=F, col.names=F)
+	if(VERSION==1)
+    write.table(sprintf("run /home/jeremy/startup.m\n[IDs ReadTimes] = run_genomic_withRunon('%s/%s',%f,%f,'%s');",getwd(),inFile,elongation_rate,k_unpause,conversionString),file='tmp.matlab.m',quote=F,row.names=F, col.names=F)
+  if(VERSION==2)
+    write.table(sprintf("run /home/jeremy/startup.m\n[IDs ReadTimes] = run_genomic_withRunon2('%s/%s',%f,%f,'%s');",getwd(),inFile,elongation_rate,k_unpause,conversionString),file='tmp.matlab.m',quote=F,row.names=F, col.names=F)    
+
 	# Call that script
 	system("matlab -nojvm < tmp.matlab.m")
   # read the file back in
-  read.table(sprintf('%s_splicingRatesRunon_%.2f_%.2f_%s',sub('.txt$','',inFile), elongation_rate, k_unpause, conversionString),col.names=c("UniqueID","PredSplice1","PredSplice2"))  
+  cat("Finished MATLAB process\n")
+  if(VERSION==1)
+    cat(sprintf("Writing to %s\n", OUT<-sprintf('%s_splicingRatesRunon_%.2f_%.2f_%s.txt',sub('.txt$','',inFile), elongation_rate, k_unpause, conversionString)))
+  if(VERSION==2)
+    cat(sprintf("Writing to %s\n", OUT<-sprintf('%s_splicingRatesRunon2_%.2f_%.2f_%s.txt',sub('.txt$','',inFile), elongation_rate, k_unpause, conversionString)))
+  read.table(OUT,col.names=c("UniqueID","PredSplice","PredSplice_strength","PredSplice_pause","PredSplice_runon","PredSplice_ALL")) 
 }
 
 ################################################################################################################################################
@@ -1066,9 +1075,64 @@ normalizeToText = function(fileIn, fileOut, myCol=2, header=FALSE, LOG=F, ...){
 }
 
 
+###################################################################################################################################################
+## Get first, last, middle exons for a genome
+###################################################################################################################################################
+getFirstMiddleLast = function(exons){
+  ## First go back and figure out the # exons per gene
+  # For each isoform, get the isLast numExons
+  myLastExons = exons[exons$isLast==1,]
+  myFirstExons = exons[exons$FeatureCount==1,]
+  myMiddleExonLengths = data.frame(UniqueID=myLastExons$UniqueID, FeatureCount=round(myLastExons$FeatureCount/2))
 
+  myMiddleExons = merge(exons, myMiddleExonLengths, by=c('UniqueID','FeatureCount')) 
+  #myMiddleExons = subset(myMiddleExonLengths, FeatureCount != MiddleCount & MiddleCount > 1)
 
+  list(Firsts = myFirstExons, Middles = myMiddleExons, Lasts = myLastExons)
 
+}
 
+###################################################################################################################################################
+## Take some GRO-seq data from Karmel Allison's database and remove genes that are too close to other genes
+###################################################################################################################################################
+makeGROdata = function(inputFile="/home/home/jeremy/RNAseq/Glass/refseq_and_subsequent_transcripts_with_tag_counts.txt", refGene,outputFile = "GRO_Data.RData", geneDistance=1000){ 
+  
+  ## Read in GRO data
+  GRO = read.delim(inputFile,stringsAsFactors=F)
+  
+  ## Calculate the Read-Through (hereafter referred to as 'Runon') and get rid of genes with no measurable read-through.
+  GRO$Runon = abs(GRO$post_transcript_end - GRO$post_transcript_start)
+  GRO = GRO[!is.na(GRO$Runon),]
+  
+  ## Annotate by merging with refGene
+  GRO2 = merge(GRO,refGene[,c("name","UniqueID","strand")],by=1)
+  
+  ## Create .bed file, overlap with refseq.bed
+  refGene$TSS = refGene$txStart
+  refGene$TSS[refGene$strand=='-'] <- refGene$txEnd[refGene$strand=='-']
+  
+  options(scipen=10) # make it so I don't write scientific numbers here
+  
+  ## Omit any GRO-seq data when the Read-Through ends within 1Kb of a gene.
+  write.table(cbind(refGene$chr, refGene$TSS-geneDistance, refGene$TSS +geneDistance , refGene$name, 0, refGene$strand),file='temp_refseq.bed',sep="\t",row.names=F,col.names=F, quote=F)
+  write.table(cbind(GRO2$chr, GRO2$post_transcript_start-1, GRO2$post_transcript_end+1, GRO2$UniqueID, 0, GRO2$strand.y),file='temp_GRO.bed',sep="\t",row.names=F,col.names=F, quote=F)
+  system("bedtools intersect -a temp_GRO.bed -b temp_refseq.bed -v -s -wa > temp_GRO_no_TSS_interuptions.bed")
+  options(scipen=0)
+  
+  ## Read data back in
+  good_GRO =read.delim("temp_GRO_no_TSS_interuptions.bed", head=F)
+  # Filter for good data
+  GRO3 <- GRO2[GRO2$UniqueID %in% good_GRO[,4],]
+  
+  ## Save
+  save(GRO3,file=outputFile)
+  
+  ## Erase temp files
+  unlink("temp_GRO_no_TSS_interuptions.bed")
+  unlink("temp_refseq.bed")
+  unlink("temp_GRO.bed")
+
+  return(GRO3)
+}
 
 

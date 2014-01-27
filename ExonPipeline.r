@@ -24,7 +24,9 @@ features = loadFeatures(settings,refseq,genome)  # 	This excludes intron-less ge
 #settings = computeNucleosomeEnergy(settings,features,genome,WIDTH = 180)
 
 ## New way
-settings = computeNucleosomeEnergy2(settings,features,genome,WIDTH = 147)
+#settings = computeNucleosomeEnergy2(settings,features,genome,WIDTH = 147)
+settings = computeNucleosomeEnergy3(settings,features,genome,WIDTH = 147)
+
 
 ### Compute splice site strength
 ## Simply using 
@@ -32,9 +34,7 @@ settings = computeSpliceSiteStrength(settings,features,genome)
 
 saveData(settings)#,file='settings.RData')
                                                
-#source("/home/jeremy/ExonPipeline/ExonPipeline_plottingOnly.r")
-#source("/home/jeremy/ExonPipeline/ExonPipeline_plottingOnly2.r")
-source("/home/jeremy/ExonPipeline/ExonPipeline_plottingOnly4.r")
+source("/home/jeremy/ExonPipeline/ExonPipeline_plottingOnly6.r")
 
 #settings = computeSpliceSiteStrength2(settings,features,genome)
 #saveData(settings)#,file='settings.RData')

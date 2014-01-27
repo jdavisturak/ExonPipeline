@@ -1,0 +1,24 @@
+Human HK	17023
+Human nonHK	1794
+Chimp HK	853
+Chimp nonHK	226
+Chicken HK	3455
+Chicken nonHK	800
+Fly HK	10527
+Fly nonHK	171
+C. Elegans HK	19309
+C. Elegans nonHK	19309
+Arabidopsis HK	297
+Arabidopsis nonHK	297
+Human HK	17023
+Human nonHK	1794
+Chimp HK	853
+Chimp nonHK	226
+Chicken HK	3455
+Chicken nonHK	800
+Fly HK	10527
+Fly nonHK	171
+C. Elegans HK	19309
+C. Elegans nonHK	19309
+Arabidopsis HK	297
+Arabidopsis nonHK	297

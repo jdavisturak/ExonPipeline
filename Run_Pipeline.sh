@@ -16,6 +16,6 @@ R --vanilla --no-save < ../ExonPipeline.r
 cd /home/home/jeremy/ExonPipeline/ce6
 R --vanilla --no-save < ../ExonPipeline.r
 
-cd /home/home/jeremy/ExonPipeline/tair9
-R --vanilla --no-save < ../ExonPipeline.r
+#cd /home/home/jeremy/ExonPipeline/tair9
+#R --vanilla --no-save < ../ExonPipeline.r
 

@@ -129,13 +129,14 @@ loadFeatures= function(settings,refseq,genome){
 
 retrieveFeatures = function (settings,refseq,genome){
 	require(Biostrings)
+	require(GenomicRanges)
 	 
 	## First get rid of all genes with only 1 exon!
 	refseq = refseq[refseq$exonCount > 1,]
 	
   	# Initialize output lists
-	exon_matrix = matrix(NA,sum(refseq$exonCount),9)
-	intron_matrix = matrix(NA,sum(refseq$exonCount-1),8)
+	exon_matrix = matrix(NA,sum(refseq$exonCount),10)
+	intron_matrix = matrix(NA,sum(refseq$exonCount-1),10)
 	
 
 	exon_counter = 0
@@ -147,6 +148,7 @@ retrieveFeatures = function (settings,refseq,genome){
   		# Retreive the 'exonStarts' and 'exonStops'
   		exonStarts = as.numeric(unlist(strsplit(refseq$exonStarts[i],",")))
   		exonEnds = as.numeric(unlist(strsplit(refseq$exonEnds[i],",")))
+  		exonFrames = as.numeric(unlist(strsplit(refseq$exonFrames[i],",")))
   	
   	
     	# Check the strand and chrom, get other info
@@ -156,9 +158,7 @@ retrieveFeatures = function (settings,refseq,genome){
     	intronCount = exonCount-1
     	uniqueID = refseq$UniqueID[i]
     	geneName = refseq$name2[i]
-    	geneLength = tail(exonEnds,1) - exonStarts[1]
-    	
-    	
+    	geneLength = tail(exonEnds,1) - exonStarts[1]    	
     	    	
     	## Based on the strand, decide which parts are the real 'starts' and 'ends'
 
@@ -167,6 +167,7 @@ retrieveFeatures = function (settings,refseq,genome){
 			  temp = exonStarts
 		      exonStarts = rev(exonEnds)
 			  exonEnds = rev(temp)
+			  exonFrames = rev(exonFrames)
 			  
 			}
   		# Get the intron starts and stops
@@ -177,18 +178,18 @@ retrieveFeatures = function (settings,refseq,genome){
 	
 		## Save this data, along with identifying data
 	  	
-    	exon_matrix[exon_counter + (1:exonCount),] <- cbind(uniqueID=uniqueID, GeneName=geneName, FeatureCount=1:exonCount, isLast=c(rep(0,exonCount-1),1), CHR, exonStarts, exonEnds, strand,geneLength)
+    	exon_matrix[exon_counter + (1:exonCount),] <- cbind(uniqueID=uniqueID, GeneName=geneName, FeatureCount=1:exonCount, isLast=c(rep(0,exonCount-1),1), CHR, exonStarts, exonEnds, strand,geneLength,exonFrames)
     	exon_counter = exon_counter + exonCount    	
     	
-    	intron_matrix[intron_counter + (1:intronCount),] <- cbind(UniqueID=uniqueID, GeneName=geneName, FeatureCount=1:intronCount, isLast=c(rep(0,intronCount-1),1), CHR, intronStarts, intronEnds, strand)
+    	intron_matrix[intron_counter + (1:intronCount),] <- cbind(UniqueID=uniqueID, GeneName=geneName, FeatureCount=1:intronCount, isLast=c(rep(0,intronCount-1),1), CHR, intronStarts, intronEnds, strand,upstreamFrame=exonFrames[-length(exonFrames)],downstreamFrame=exonFrames[-1])
     	intron_counter = intron_counter + intronCount    
     	    	
    }
    cat(sprintf("Done                 \n"))
   
    # Add names to the matrix
-   dimnames(exon_matrix)[[2]] = c('UniqueID','GeneName','FeatureCount','isLast','chr','start','end','strand','GeneLength')	 
-   dimnames(intron_matrix)[[2]] = c('UniqueID','GeneName','FeatureCount','isLast','chr','start','end','strand')
+   dimnames(exon_matrix)[[2]] = c('UniqueID','GeneName','FeatureCount','isLast','chr','start','end','strand','GeneLength','exonFrames')	 
+   dimnames(intron_matrix)[[2]] = c('UniqueID','GeneName','FeatureCount','isLast','chr','start','end','strand','upFrame','downFrame')
    exon_matrix = data.frame(exon_matrix,stringsAsFactors=FALSE)
    intron_matrix = data.frame(intron_matrix,stringsAsFactors=FALSE)
     
@@ -326,6 +327,61 @@ computeNucleosomeEnergy2 = function(settings,features,genome,WIDTH = 147){
 }
 
 
+############################################################################################################
+### Wrapper function to prepare exons and run seqToNuc version 2
+### 4/2/13 This is constrainted fixed length: limits the length of the sequence to the exon extent, and does not extend past the end of the exon, even if it means using fewer than WIDTH bases.
+### This function start 3bp downstream from the beginning of the exon, so as not to confound the data with the splice site info
+############################################################################################################
+
+computeNucleosomeEnergy3 = function(settings,features,genome,WIDTH = 147){
+
+    ## Get output file name 
+    settings$nucTestFileConstrained = sub(".txt$",sprintf("_constrained_%d.txt",WIDTH),settings$NucTestFile)
+    
+    ## Export specific sequences 
+    if (!file.exists(settings$nucTestFileConstrained)){
+      firstSeq = 1
+      cat(sprintf("Retrieving sequences of exons for nucleosome test 3 (starting with seq %d):\n", firstSeq))
+   
+      unique_features = removeDuplicateStarts(features$exons)
+    
+       seqs_for_nucleosomes = retrieveFixedSequences_min(settings, unique_features, genome, width=WIDTH, overhangUp=-3, overhangDown=0, fromStart=TRUE,outputFile=settings$nucTestFileConstrained,writeDuring=T,firstSeq=firstSeq)
+        
+    }
+
+    ### Run BasicSeqToNuc2.jar
+    settings$nucTestFileConstrained_out = sprintf('%s_out.txt',settings$nucTestFileConstrained)
+
+    if (!file.exists(settings$nucTestFileConstrained_out)){
+      cat("Running Seq To Nuc 2 (on fixed exon lengths)\n")
+
+      system(sprintf("java -Xmx1024m -jar ~/bin/BasicSeqToNuc.jar %s", settings$nucTestFileConstrained))
+
+    }     
+    
+    
+    ## Compute the mean over the entire length.
+    settings$nucTestFileConstrained_mean = sub(".txt$","_mean.txt",settings$nucTestFileConstrained)
+    
+    if (!file.exists(settings$nucTestFileConstrained_mean)){
+      cat("Averaging Seq To Nuc output\n")
+     
+      computeNucMean (settings, settings$nucTestFileConstrained_out, settings$nucTestFileConstrained_mean)
+    }
+    
+    ## Normalize the nucleosome splicing score
+    settings$nucNormScore_constrained = sub("_mean.txt$","_norm.txt",settings$nucTestFileConstrained_mean)
+   
+    if (!file.exists(settings$nucNormScore_constrained)){
+      cat("Normalizing Seq To Nuc output\n")
+      normalizeToText(settings$nucTestFileConstrained_mean, settings$nucNormScore_constrained)
+    }
+
+    return(settings)
+}
+
+
+
 ################################################################################################################################################################################
 #### Function to compute the mean of the NUC signal.
 ################################################################################################################################################################################
@@ -395,6 +451,83 @@ retrieveFixedSequences = function (settings,featureList,genome,width=180,overhan
         
         right = featureList[i,myCol] + overhangUp # 'upstream' is in the context of transcription
         left  = featureList[i,myCol] - overhangDown - width + 1 # Correct for 0-indexing
+        
+        seq = as.character(reverseComplement(subseq(genome[[featureList$chr[i]]],start=left,end=right)))
+      }
+			
+      # save seq to array
+    	output_seqs[i] <- seq  
+    	 	
+    	# If the writeDuring setting is allowed, save last 1,000 rows to file 	
+    	if(i%%100==0 & writeDuring){                                 
+    			# write some output
+  				savePortion(output_seqs[(lastSaved+1):i],headers[(lastSaved+1):i], outputFile)
+          lastSaved = i
+    		} 	
+    	 	
+    }
+     cat(sprintf("Done                \n"))
+   
+    ## After looping through all sequences, write the remaining outputs to file
+   	if(i != lastSaved){                                 
+       # write some output
+	     savePortion(output_seqs[(lastSaved+1):i],headers[(lastSaved+1):i], outputFile)      
+ 		} 
+}
+
+################################################################################################################################################################################
+#### Function to retrieve a CONSTRAINED FIXED LENGTH of a sequence from a list of features 
+## 4/2/12 This revision allows one to constrain the sequence to N characters.
+################################################################################################################################################################################
+
+retrieveFixedSequences_min = function (settings,featureList,genome,width=147,overhangUp=37,overhangDown=37,fromStart=TRUE,firstSeq=1, outputFile=NULL,writeDuring=FALSE,removeBadChars=FALSE){
+	# If 'fromStart' is FALSE, then get the sequenced started from the END of the feature 
+
+    print(width)
+
+    ### First get the Length of the regions
+    featureList$Length = abs(featureList$start-featureList$end)
+
+  	## Initialize output list
+  	# Length of sequence:
+  	featureList$seqLength = sapply(featureList$Length, function(x) min(c(x,width))) -1 + overhangUp + overhangDown
+    # Remove super short ones
+    featureList = subset(featureList,seqLength > 10)
+	
+  	# For each feature, add a blank sequence
+  	output_seqs = sapply(featureList$seqLength,function(x)paste(rep('0',x),collapse=''))
+    # Make the .fa headers
+    headers = paste(">", featureList$UniqueID, '_', featureList$FeatureCount, '_', featureList$isLast, sep='')    
+    #browser()
+  	  	
+  	## Do I start from start or end of each feature?
+  	myCol = ifelse(fromStart,'start','end')
+  	cat(sprintf ("Collecting features based on column '%s'\n",myCol))
+  	#print(names(featureList))
+  	
+  	## For each feature, return the sequence. NOTE: need to correct for UCSC's 0-based indexing
+  	lastSaved = firstSeq-1 
+  	for( i in firstSeq:nrow(featureList)){
+		
+		
+		#if(i%%1000==1)
+  	 cat(sprintf("Doing seq %d\r",i))
+  		
+  		
+  		if(featureList$strand[i] == '+'){
+    		# Positive strand: 'simple'
+    		left = featureList[i,myCol] - overhangUp + 1 # Correct for 0-indexing
+    		right  = featureList[i,myCol] + overhangDown + featureList$seqLength[i]
+    		
+    		seq = as.character(subseq(genome[[featureList$chr[i]]],start=left,end=right))
+	
+    	}else{                                                
+    		
+        # Negative strand: NOTE that left and right are reversed! Because the 'start' in the featureList is the ACTUAL start of the feature
+        #		(i.e. to the right on a genome browser track, in Negative strand), but subseq() function requires end >= start
+        
+        right = featureList[i,myCol] + overhangUp # 'upstream' is in the context of transcription
+        left  = featureList[i,myCol] - overhangDown - featureList$seqLength[i] + 1 # Correct for 0-indexing
         
         seq = as.character(reverseComplement(subseq(genome[[featureList$chr[i]]],start=left,end=right)))
       }
@@ -1123,6 +1256,52 @@ makeGROdata = function(inputFile="/home/home/jeremy/RNAseq/Glass/refseq_and_subs
   good_GRO =read.delim("temp_GRO_no_TSS_interuptions.bed", head=F)
   # Filter for good data
   GRO3 <- GRO2[GRO2$UniqueID %in% good_GRO[,4],]
+  
+  ## Save
+  save(GRO3,file=outputFile)
+  
+  ## Erase temp files
+  unlink("temp_GRO_no_TSS_interuptions.bed")
+  unlink("temp_refseq.bed")
+  unlink("temp_GRO.bed")
+
+  return(GRO3)
+}
+
+###################################################################################################################################################
+## Take some GRO-seq data from Karmel Allison's database and remove genes that are too close to other genes
+###################################################################################################################################################
+makeGROdata2 = function(inputFile="/home/RNAseq/Glass/post_gene_transcripts.txt", refGene,outputFile = "GRO_Data_redone.RData", geneDistance=1000){ 
+  
+  ## Read in GRO data
+  GRO = read.delim(inputFile,stringsAsFactors=F)
+  
+  ## Calculate the Read-Through (hereafter referred to as 'Runon') and get rid of genes with no measurable read-through.
+  #GRO$Runon = abs(GRO$post_gene_end - GRO$gene_ends)
+  #GRO = GRO[!is.na(GRO$Runon),]
+  
+  ## Annotate by merging with refGene
+  GRO2 = merge(GRO,refGene[,c("name","UniqueID","strand")],by=1)
+  
+  ## Create .bed file, overlap with refseq.bed
+  refGene$TSS = refGene$txStart
+  refGene$TSS[refGene$strand=='-'] <- refGene$txEnd[refGene$strand=='-']
+  
+  options(scipen=10) # make it so I don't write scientific numbers here
+  
+  ## Omit any GRO-seq data when the Read-Through ends within 1Kb of a gene.
+  write.table(cbind(refGene$chr, refGene$TSS-geneDistance, refGene$TSS +geneDistance , refGene$name, 0, refGene$strand),file='temp_refseq.bed',sep="\t",row.names=F,col.names=F, quote=F)
+  write.table(cbind(GRO2$chr, GRO2$post_gene_start-1, GRO2$post_gene_end+1, GRO2$UniqueID, 0, GRO2$strand),file='temp_GRO.bed',sep="\t",row.names=F,col.names=F, quote=F)
+  system("bedtools intersect -a temp_GRO.bed -b temp_refseq.bed -v -s -wa > temp_GRO_no_TSS_interuptions.bed")
+  options(scipen=0)
+  
+  ## Read data back in
+  good_GRO =read.delim("temp_GRO_no_TSS_interuptions.bed", head=F)
+  
+  # Filter for good data
+  GRO3 <- GRO2[GRO2$UniqueID %in% good_GRO[,4],]
+  
+  GRO3$Runon = ifelse(GRO3$strand=='+',   abs(GRO3$post_gene_end - GRO3$gene_ends),  abs(GRO3$post_gene_start - GRO3$gene_start))
   
   ## Save
   save(GRO3,file=outputFile)

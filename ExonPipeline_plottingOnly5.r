@@ -7,11 +7,13 @@
 #  Here, the sequences used to calculate Nucleosome occupancy are totally separate from those used to calculate splice site strength
 #
 #	11/20/2012: Modified this again to use NORMALIZED values of Energy and Log(splicing scores)
-# **********************************************************************************************************************************
+#
+#  4/4/13: Modified again to be run on data that used Constrained fixed lengths , i.e. doesn't go out into the intron
+#
+#**********************************************************************************************************************************
 
 rm(list=ls())
 library(gplots)
-library(devEMF)
 source("/home/jeremy/ExonPipeline/ExonPipeline_functions.r")
 source("/home/jeremy/ExonPipeline/ExonPipeline_analysis_and_plotting_Functions.r")
 
@@ -24,7 +26,7 @@ exons = removeDuplicateStartANDEnds(read.delim("exons.txt",stringsAsFactors=F))
 LENGTH = cbind(Value = abs(exons$start-exons$end), isLast = exons$isLast)
 
 # Get Nucleosome energy
-energyData = read.delim(settings$nucNormScore,head=F,stringsAsFactors=F)
+energyData = read.delim(settings$nucNormScore_constrained,head=F,stringsAsFactors=F)
 ENERGY = formatData(energyData)
 
 ## Get splice site strength
@@ -39,8 +41,7 @@ bins = c(1,2,5,10)
 HKlist = read.delim("/home/jeremy/ExonPipeline/hg19/HouseKeepingGenes.txt",skip=1)
 mergedData = mergeLastData(exons,energyData,donorData,acceptorData,bins*180,HKlist)
 
-#write.table( cbind(paste(settings$CommonName,c("HK","nonHK")),table(mergedData$isHK)),file="../Species_HK_list.txt",append=T,row.names=F,col.names=F,quote=F,sep="\t")
-save.image("PlottedData4.RData")
+save.image("PlottedData5.RData")
  
 #load("PlottedData3.RData")
 cat("	Plotting data:\n") 
@@ -50,8 +51,7 @@ cat("	Plotting data:\n")
 palette(colorRampPalette(c('white','orange'))(8))
 cols=palette()
 
-#png(sprintf('%s_Barplots4.png',settings$CommonName),height=1600,width=300)
-emf(sprintf('%s_Barplots4.emf',settings$CommonName),height=8,width=2)
+pdf(sprintf('%s_Barplots5.pdf',settings$CommonName),height=8,width=2)
 par(mfrow=c(4,1),cex.axis=1.2,cex=0.7,cex.main=1.1,mar=c(2,3,2,1),lwd=4)
    errorcol=rgb(1/2,1/4,0.26)
   makeBarplot(LENGTH,'',doLog=T,col=c("black","grey"),addStats=F,yaxt='n',border=c("black","grey"),errorcol=errorcol)
@@ -68,8 +68,7 @@ dev.off()
 ### Do some plots based on splitting up the data into groups
 
 ## SPLIT BY LENGTH
-png(sprintf('%s_simple_splitByLength4.png',settings$CommonName),height=1200,width=400)
-#emf(sprintf('%s_simple_splitByLength4.emf',settings$CommonName),height=12,width=6)
+pdf(sprintf('%s_simple_splitByLength5.pdf',settings$CommonName),height=12,width=4)
 
 par(mfrow=c(2,1),cex.axis=1.2,cex=1.3,cex.main=1.1,las=3,mar=c(6.1 ,4.1 ,4.1, 2.1))
 
@@ -83,7 +82,7 @@ plotSplits(mergedData,'Acceptor','',add=T,type='l',lwd=2,gap=0,sfrac=0.02)
 #
 dev.off()
 
-emf(sprintf('%s_simple2_splitByLength4.emf',settings$CommonName),height=12,width=6)
+pdf(sprintf('%s_simple2_splitByLength5.pdf',settings$CommonName),height=12,width=6)
 par(mfrow=c(2,1))
 plotSplits(mergedData,'Energy','',add=F,type='l',lwd=2,gap=0,sfrac=0.02)
 par(new=F)
@@ -92,7 +91,7 @@ dev.off()
 
          
 ### Do with medians
-png(sprintf('%s_simple_splitByLength4_Median.png',settings$CommonName),height=1200,width=400)
+pdf(sprintf('%s_simple_splitByLength5_Median.pdf',settings$CommonName),height=12,width=4)
 par(mfrow=c(3,1),cex.axis=1.2,cex=1.3,cex.main=1.1,las=3,mar=c(6.1 ,4.1 ,4.1, 2.1))
 
 xlabs = tapply(mergedData$length,mergedData$Group,function(x)paste(range(x),collapse='-'))

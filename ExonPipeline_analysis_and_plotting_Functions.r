@@ -43,21 +43,35 @@ makeBoxplot = function(DATA, mainText ='',doLog=F,NAMES=c('Non-last','last'), ad
 
 ##### Function to make ONE set of barplots
 makeBarplot = function(DATA, mainText ='', doLog=F, YLIM=NULL, addStats=TRUE,errorcol='black', ...){
-
-  if (doLog){
-    DATA[,1] = log10(DATA[,1])
-  }
+#
+#  if (doLog){
+#    DATA[,1] = log10(DATA[,1])
+#  }
 
   stats = getStats(DATA[,1],DATA[,2])  
+  up = stats[,1] + stats[,2]
+  down = stats[,1] - stats[,2]
+  
+  
+  if (doLog){ 
+    # Take the log10 now
+    stats[,1] = log10(stats[,1])
+    stats[,3] = log10(stats[,3])
+
+    up = log10(up); print(up)
+    stats[,2] = up - stats[,1] # this is so the YLIM will work correctly
+    down = log10(down); print(down)
+  }
 
   if(is.null(YLIM)) YLIM = c(0, max(rowSums(stats[,1:2]))*1.2)
   
   if(addStats) mainText=paste(mainText,lmText(DATA,FALSE),sep="\n")
 
   x=barplot(stats[,1], main=mainText, names=c('Non-last','last'), ylim=YLIM,...)
-  arrows(x,stats[,1],x,stats[,1]+stats[,2],angle=90,length=0.15,col=errorcol,lwd=2);
-  arrows(x,stats[,1],x,stats[,1]-stats[,2],angle=90,length=0.15,col=errorcol,lwd=2);
-  abline(h=0,lty=2)
+  arrows(x,stats[,1],x, up ,angle=90,length=0.15,col=errorcol,lwd=2,gap=0);
+  arrows(x,stats[,1],x, down,angle=90,length=0.15,col=errorcol,lwd=2,gap=0);
+  abline(h=0,lwd=1)
+  
 }
 
 
@@ -73,6 +87,16 @@ splitByVector=function(dat,splitsVector){
     groups[dat > splitsVector[x]] <- x+1  
   groups
 }
+
+quantileGroups = function(dat,N=10){
+   splitByVector(dat,quantile(dat,na.rm=T,(1:(N-1))/N))
+}
+
+getQuantilMedians = function(myData,col1='Dist2End',column='splicing0',N=100){
+  myData$Group = quantileGroups(myData[,col1],N)
+  data.frame(LengthMedian = tapply(myData[,col1],myData$Group,median,na.rm=T), median = tapply(myData[,column],myData$Group,median,na.rm=T))
+}
+
 
 
 ### Function to convert raw data to something merge-able
@@ -138,7 +162,6 @@ mergeLastData = function(exons,energyData,donorData,acceptorData,bins,HKlist){
   OUT   
 }
 
-
 #### Function to get mean, SEM based on group
 getStats = function(dat,group,doPrint=TRUE){
 	# print out lm fit 
@@ -161,13 +184,14 @@ plotSplits = function(dat,column,main,Group='Group',avg='mean',...){
 }
 
 
+
 ################################################
 
 ##### Function to divide in 2 by a HK status, then plot twice for HK vs Non
-plotSplitsHK = function(dat,column,main,Group='Group',names=NULL, YLIM=NULL, LTY=1,avg='mean',colors=c('red','blue'), lwd=2,sfrac=0.02,...){
+plotSplitsHK = function(dat,column,main,Group='Group',names=NULL, checkColumn='isHK', YLIM=NULL, LTY=1,avg='mean',colors=c('red','blue'), lwd=2,sfrac=0.02,type='l',...){
   require(gplots)
-  statsHK = getStats(dat[dat$isHK==1,column],dat[dat$isHK==1,Group])  
-  statsNon = getStats(dat[dat$isHK==0, column],dat[dat$isHK==0,Group])
+  statsHK = getStats(dat[dat[,checkColumn]==1,column],dat[dat[,checkColumn],Group])  
+  statsNon = getStats(dat[dat[,checkColumn]==0, column],dat[dat[,checkColumn]==0,Group])
   xaxt=ifelse(is.null(names),'s','n')
    
   avgCol = ifelse(avg=='mean',1,3); # This uses column 1 for mean, 3 for median
@@ -176,13 +200,15 @@ plotSplitsHK = function(dat,column,main,Group='Group',names=NULL, YLIM=NULL, LTY
 	  YLIM <- c(min(c(min(statsNon[,avgCol]-statsNon[,2]),min(statsHK[,avgCol]-statsHK[,2]))), max(c(max(statsNon[,avgCol]+statsNon[,2]),max(statsHK[,avgCol]+statsHK[,2]))))
   }  
     
-  type='l';col1=colors[1]; col2=colors[2];
+  col1=colors[1]; 
+  col2=colors[2];
   plotCI(statsHK[,avgCol],uiw=statsHK$SEM, main=main,ylim=YLIM,type='n',lwd=lwd,col=col1,barcol=col1,xaxt=xaxt,gap=0,sfrac=sfrac,labels='',...)
   par(new=T)
   plotCI(statsNon[,avgCol],uiw=statsNon$SEM, ylim=YLIM,lwd=lwd,type='n',col=col2,barcol=col2,xaxt='n',xlab='',ylab='',yaxt='n',gap=0,labels='',sfrac=sfrac)
+  
   if(type=='l' | type=='b'){
-    lines(statsHK[,avgCol],uiw=statsHK$SEM,ylim=YLIM,lwd=lwd,col=col1,xaxt='n',xlab='',ylab='',yaxt='n', lty=LTY)
-    lines(statsNon[,avgCol],uiw=statsNon$SEM,ylim=YLIM,lwd=lwd,col=col2,xaxt='n',xlab='',ylab='',yaxt='n', lty=LTY)
+    lines(statsHK[,avgCol],ylim=YLIM,lwd=lwd,col=col1,xaxt='n',xlab='',ylab='',yaxt='n', lty=LTY)
+    lines(statsNon[,avgCol],ylim=YLIM,lwd=lwd,col=col2,xaxt='n',xlab='',ylab='',yaxt='n', lty=LTY)
   }
   
   
@@ -213,4 +239,18 @@ plotFig4Like = function(DATA,name,group,main, AVG = 'median'){
   plotSplitsHK(DATA,'PredSplice','',Group=group,add=T,LTY=2,YLIM=c(0.0,1),xlab='Last Exon Length',avg=AVG,ylbias=-1)
                    
   options(W); dev.off() 
+}
+
+
+formatAxes = function(){
+axis(1,-2:6,sapply(-2:6,function(x) format(10^(x),scientific=F)),las=2)
+axis(2,seq(0,1,.1),lab=NA,tcl=-.3)
+axis(2,seq(0,1,.5),tcl=-.5)
+}
+
+
+formatAxes_kb = function(){  #format for kb!
+axis(1,-2:6,sapply((-2:6)-3,function(x) format(10^(x),scientific=F)),las=2)
+axis(2,seq(0,1,.1),lab=NA,tcl=-.3)
+axis(2,seq(0,1,.5),tcl=-.5)
 }

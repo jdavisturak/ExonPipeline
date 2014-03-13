@@ -166,17 +166,22 @@ write.delim(subset(dat.Pos,isLast==1 ,c('chr','exonStart','exonEnd','energy_ID',
 write.delim(subset(dat.Neg,isLast==1 ,c('chr','exonStart','exonEnd','energy_ID','FeatureCount','strand')),File=sprintf('%s_exons_-%dTo%d_last-.bed',settings$CommonName,UP,DOWN),col.names=F)
 
 
-UP=1000
-#DOWN=5000
-DOWN=1000
+## Make .bed files for poly A region
 
-refseq$polyAstart = refseq$Ends + UP   * ifelse(refseq$strand=='+',  1, -1)
-refseq$polyAend =   refseq$Ends + DOWN * ifelse(refseq$strand=='+', -1,  1)
+for (intervals in list(
+  data.frame(UP=1000,DOWN=1000), data.frame(UP=1000,DOWN=5000) 
+  )){
+  UP=  intervals$UP
+  DOWN=intervals$DOWN
+  refseq$polyAstart = refseq$Ends + UP   * ifelse(refseq$strand=='+',  1, -1)
+  refseq$polyAend =   refseq$Ends + DOWN * ifelse(refseq$strand=='+', -1,  1)
+  
+  write.delim(subset(refseq,strand=='+' ,c('chrom','polyAstart','polyAend','UniqueID','exonCount','strand')),File=sprintf('%s_polyA_-%dTo%d+.bed',settings$CommonName,UP,DOWN),col.names=F)
+  write.delim(subset(refseq,strand=='-' ,c('chrom','polyAstart','polyAend','UniqueID','exonCount','strand')),File=sprintf('%s_polyA_-%dTo%d-.bed',settings$CommonName,UP,DOWN),col.names=F)
+}  
 
-write.delim(subset(refseq,strand=='+' ,c('chrom','polyAstart','polyAend','UniqueID','exonCount','strand')),File=sprintf('%s_polyA_-%dTo%d+.bed',settings$CommonName,UP,DOWN),col.names=F)
-write.delim(subset(refseq,strand=='+' ,c('chrom','polyAstart','polyAend','UniqueID','exonCount','strand')),File=sprintf('%s_polyA_-%dTo%d-.bed',settings$CommonName,UP,DOWN),col.names=F)
 
-### Thus way is different:
+### This way is different:
 ### Do this for poly(A) ends that I mean to use for bigWigAverageOverBed
 UP=DOWN=100
 

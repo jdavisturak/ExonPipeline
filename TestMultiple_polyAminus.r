@@ -58,7 +58,6 @@ names(mergedData2)[ncol(mergedData) + (1:ncol(SplicingMerged))] = ChromInfo[,2]
 
 
 
-
 #############################################################################
 ### New 10/29/13: Analyze Cytoplasmic poly(A) RNAseq of these guys first, THEN  do the rest
 #############################################################################
@@ -155,7 +154,7 @@ print("Finished Saving the first part")
 
 
 ## For all genes in mergedData3 (those that have evidence of correct splicing in Cytoplasmic)
-## measure the distribution of the % poly-Adenylated of those genes in THIS sample
+## measure the distribution of the cleavage Ratio of those genes in THIS sample
 myPolyA = list()
 for ( i in 1:nrow(ChromInfo)){
    myColumn = ChromInfo[i,2] 
@@ -164,15 +163,7 @@ for ( i in 1:nrow(ChromInfo)){
    myPolyA[[i]] = myNuclear_CleavedFractions[[i]][names(myNuclear_CleavedFractions[[i]]) %in% theseGenes]      
 }
 
-# Temp hack while waiting: 
-# ALT=c(2,1,3)
-## load('/home/RNAseq/Tilgner/K562_polyA_depleted/ENCODE_K562_cleavedFractions_refseq.RData')
-#for ( i in 1:3){
-#   myColumn = ChromInfo[i,2] 
-#   theseGenes = mergedData3$UniqueID[!is.na(mergedData3[, myColumn])]
-#   myPolyA[[i]] = AllCleavedAverages[rownames(AllCleavedAverages) %in% theseGenes,ALT[i]]  
-#}
-
+# Obtain a list of genes that have cleavage Ratio of 0.8 or higher
 polyA80 = sapply(1:9,function(i)try(length(which(myPolyA[[i]] > 0.8))/length(myPolyA[[i]])))
 
 

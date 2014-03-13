@@ -39,12 +39,15 @@ for(i in 1:nrow(ChromInfo)){
   dat$Theta3 = (dat$count53 + dat$countX3) / dat$Denom3
 
   # My way:
-  dat$DenomJer = dat$count53 + (dat$count50 + dat$count03)/2
+  #dat$DenomJer = dat$count53 + (dat$count50 + dat$count03)/2
+  dat$DenomJer = dat$count53 + (dat$count50 + dat$count03)/2 + dat$count5X+dat$countX3
   dat$SpliceJer = dat$count53 / dat$DenomJer
   
-  splicingData[[i]] = dat[dat$DenomJer  > 15,]
-  splicingData_Theta5[[i]] = dat[dat$Denom5  > 15,]
-  splicingData_Theta3[[i]] = dat[dat$Denom3  > 15,]  
+  cutoff=15
+  #splicingData[[i]] = dat[dat$DenomJer  > 15,]
+  splicingData[[i]] = dat[dat$DenomJer  > cutoff & dat$count5X < 1 & dat$countX3 < 1,]
+  splicingData_Theta5[[i]] = dat[dat$Denom5  > cutoff,]
+  splicingData_Theta3[[i]] = dat[dat$Denom3  > cutoff,]  
   
   SplicingMerged[,i] = splicingData[[i]]$SpliceJer[match(mergedData$coSI_ID, splicingData[[i]]$coSI_ID)]
 
@@ -57,20 +60,20 @@ names(mergedData2)[ncol(mergedData) + (1:ncol(SplicingMerged))] = ChromInfo[,2]
 
 
 #############################################################################
-### New 10/29/31: Analyze Cytoplasmic poly(A) RNAseq of these guys first, THEN  do the rest
+### New 10/29/13: Analyze Cytoplasmic poly(A) RNAseq of these guys first, THEN  do the rest
 #############################################################################
 
+dataDir = '/home/RNAseq/Tilgner/Cytosol/'
+getNames = function(file)read.delim(file, stringsAsFactors=F,head=F)[,1]
+getFileData = function(file)read.delim(file, stringsAsFactors=F,head=F)[,4]
+
 f=function(cell,rep)cbind(sprintf("wgEncodeCshlLongRnaSeq%sCytosolPapPlusRawSigRep%d.bigWig",cell,rep),sprintf("wgEncodeCshlLongRnaSeq%sCytosolPapMinusRawSigRep%d.bigWig",cell,rep))
+
 myLists = list(K562=f("K562",c(1,2)),Gm12878=f("Gm12878",c(1,2)), H1hesc=f("H1hesc",2),Helas3=f("Helas3",c(1,2)),
    Hepg2=f("Hepg2",c(1,2)), Huvec=f("Huvec",c(3,4)), Nhek=f("Nhek",c(3,4)) )
-dataDir = '/home/RNAseq/Tilgner/Cytosol/'
-   
-getNames = function(file)read.delim(file, stringsAsFactors=F,head=F)[,1]
-IDs=sub("(.*)_.*","\\1",getNames(paste(dataDir,myLists[[i]][1,1],".refseq.Up",sep="")))
-
+IDs=sub("(.*)_.*","\\1",getNames(paste(dataDir,myLists[[1]][1,1],".refseq.Up",sep="")))
 strand = refseq$strand[match(IDs,refseq$UniqueID)]  
 
-getFileData = function(file)read.delim(file, stringsAsFactors=F,head=F)[,4]
 myCleavedFractions = list()   
 
 ## For each of the lists, read in 'Up' and 'Down' reads to determine overlaps:     
@@ -96,7 +99,7 @@ for (i in 1:length(myLists)){
 names(myCleavedFractions) = names(myLists)
 
 
-## Now for all of the cell types, omit the splicing data from genes that are poly-adenylated less than 95%
+## Now for all of the cell types, omit the splicing data from genes that cleaved less than 95%
 mergedData3 = mergedData2
 # Now loop through ChromInfo
 for ( i in 1:nrow(ChromInfo)){
@@ -114,13 +117,11 @@ sapply(ChromInfo[,2],function(x)c(length(which(!is.na(mergedData2[,x]))),length(
 #     Hepg2 Huvec  Nhek
 #[1,] 25661 24013 20791
 #[2,] 19117 16602 15189
-save(myCleavedFractions, mergedData2,mergedData3, file='Human_multiple_cellTypes_splicingInfo.RData')
-
 
 
 #############################################################################
 ### New 10/31/13: Analyze NUCLEAR poly(A) RNAseq, 
-# and just report the % of genes saved above that have high poly(A) levels in this sample
+# and just report the % of genes saved above that have high cleavage levels in this sample
 ############################################################################
 
 dataDir = '/home/RNAseq/Tilgner/Nucleus/'
@@ -146,6 +147,12 @@ for (i in 1:nrow(ChromInfo)){
   AllCleavedFraction2[Up + Down <= 500] <- NA # This is equivalent to ~5 reads if length is 100 bp
   myNuclear_CleavedFractions[[i]] = rowMeans(AllCleavedFraction2)      
 }
+
+names(myNuclear_CleavedFractions) = names(myLists)
+
+save(myCleavedFractions,myNuclear_CleavedFractions,mergedData2,mergedData3, file='Spring2014_Human_multiple_cellTypes_splicingInfo.RData')
+print("Finished Saving the first part")
+
 
 ## For all genes in mergedData3 (those that have evidence of correct splicing in Cytoplasmic)
 ## measure the distribution of the % poly-Adenylated of those genes in THIS sample
@@ -176,29 +183,35 @@ polyA80 = sapply(1:9,function(i)try(length(which(myPolyA[[i]] > 0.8))/length(myP
 ### Now make median quantile plots for all of these
 #############################################################################
 
-getQuantilMedians = function(myData,col1='Dist2End',column='splicing0',N=100){
+getQuantilMedians = function(myData,col1='Dist2End',column='splicing0',N=100,func=median){
   myData$Group = quantileGroups(myData[,col1],N)
-  data.frame(LengthMedian = tapply(myData[,col1],myData$Group,median,na.rm=T), median = tapply(myData[,column],myData$Group,median,na.rm=T))
+  data.frame(LengthMedian = tapply(myData[,col1],myData$Group,median,na.rm=T), median = tapply(myData[,column],myData$Group,func,na.rm=T))
 }
 MeanGamma2 = function(LengthMedian,g,k,A,B)  sapply(LengthMedian, function(x)A * integrate(pgamma,0,x+B, shape=g, rate=k)$value/(x+B))
 MeanExp = function(LengthMedian,k,A)  sapply(LengthMedian, function(x)A * integrate(pgamma,0,x, shape=1, rate=k)$value/x)
 
-gammaDecay = function(x,shape,rate,decay) pgamma(x,shape=shape, rate=rate)*dexp(x,decay) # needs to be normalized by area under the decay curve
-MeanGamma3 = function(LengthMedian,g,k,A,B)  sapply(LengthMedian, function(x)integrate(gammaDecay,0,x+B, shape=g, rate=k,decay=A)$value/pexp(x+B,A))
-
+# gammaDecay = function(x,shape,rate,decay) pgamma(x,shape=shape, rate=rate)*dexp(x,decay) # needs to be normalized by area under the decay curve
+# MeanGamma3 = function(LengthMedian,g,k,A,B)  sapply(LengthMedian, function(x)integrate(gammaDecay,0,x+B, shape=g, rate=k,decay=A)$value/pexp(x+B,A))
+# 
 
 
 #########################################################################
 ## Fitting                                                               
 #########################################################################
+sem=function(x,na.rm=T){
+  LEN = ifelse(na.rm,length(x[!is.na(x)]), length(x))  
+  sd(x,na.rm=na.rm)/sqrt(LEN)
+}
 
-for(N=c(100,1000)) {
+for(N in c(100,1000)) {
   A_min = 0;A_max=1
   #A_min=0.9; A_max=0.9
   FitData = list()
   FitData2 = list()
-  FitData3 = list()
+  FitData_noRT2 = list()
+  FitData_RT2 = list()
   QuantileData = list()
+  SDData = list()
   
   for (i in 1:nrow(ChromInfo)){                                                        
   
@@ -208,8 +221,23 @@ for(N=c(100,1000)) {
       starts = c(g=1,k=5e-5,A=A_max,B=1000)                                       
 
     QuantileData[[i]] = getQuantilMedians(mergedData3[!is.na(mergedData3[,ChromInfo[i,2]]),],column=ChromInfo[i,2],N=N)
+    SDData[[i]] = getQuantilMedians(mergedData3[!is.na(mergedData3[,ChromInfo[i,2]]),],column=ChromInfo[i,2],N=N, func=sem)
+    
+    # Fit to exponential + read-through (3 free parameters)
     FitData[[i]] =  nls(median ~ MeanGamma2(LengthMedian,g,k,A,B), data=QuantileData[[i]],start=starts,lower=c(1,0,A_min,1),upper=c(1,Inf,A_max,Inf),algo='port');
-    FitData2[[i]] =  nls(median ~ MeanExp(LengthMedian,k,A), data=QuantileData[[i]],start=starts[2:3],lower=c(0,A_min),upper=c(Inf,A_max),algo='port');
+    
+    # Fit to exponential with no read-through (2 free parameters)
+    #FitData2[[i]] =  nls(median ~ MeanExp(LengthMedian,k,A), data=QuantileData[[i]],start=starts[2:3],lower=c(0,A_min),upper=c(Inf,A_max),algo='port');
+    FitData2[[i]] = nls(median ~ MeanGamma2(LengthMedian,g,k,A,B), data=QuantileData[[i]],start=c(starts[1],k=0.01,starts[3],B=0), lower=c(1,0,A_min,0),upper=c(1,Inf,A_max,0),algo='port');
+    
+    # Fit to Gamma with g=2, RT (3 params)
+    FitData_RT2[[i]] =  nls(median ~ MeanGamma2(LengthMedian,g,k,A,B), data=QuantileData[[i]],start=c(g=2,starts[-1]), lower=c(2,0,A_min,1),upper=c(2,Inf,A_max,Inf),algo='port');
+    
+    if(i < 9){
+      # Fit to Gamma with g=2, no RT (2 params)
+      FitData_noRT2[[i]] =  nls(median ~ MeanGamma2(LengthMedian,g,k,A,B), data=QuantileData[[i]],start=c(g=2,starts[2:3],B=0), lower=c(2,0,A_min,0),upper=c(2,Inf,A_max,0),algo='port');
+    }
+    
     #FitData3[[i]] =  nls(median ~ MeanGamma3(LengthMedian,g,k,A,B), data=QuantileData[[i]],start=c(g=1,k=5e-5,A=1/10000,B=5000),lower=c(1,0,1/100000000,1),upper=c(1,Inf,1/1000,Inf),algo='port');
   }
                                                                          
@@ -218,17 +246,27 @@ for(N=c(100,1000)) {
   ## Plotting                                                               
   #########################################################################
   
-  plot.dev(sprintf("Human_Multiple_CellTypes_splicing%d.pdf",N),'pdf', height=9, width=9)  
+  plot.dev(sprintf("Spring2014_Human_Multiple_CellTypes_splicing%d.pdf",N),'pdf', height=9, width=9)  
   blueCol = rgb(0,174,239,max=255)
+  purpleCol = 'purple'
   par(mfrow=c(3,3))
   for( x in 1:nrow(ChromInfo)){
-    plot(log10(QuantileData[[x]][,1]), (QuantileData[[x]][,2]), main=ChromInfo[x,2], pch=19, xlab= 'kb from intron to poly(A) site' , ylim=c(0,1),ylab=expression(paste('median ',Sigma)),cex=.5,cex.main=1.2,xaxt='n',cex.axis=.8,yaxt='n')
+    plotCI(log10(QuantileData[[x]][,1]), (QuantileData[[x]][,2]),SDData[[x]][,2],sfrac=0.01, gap=0, main=ChromInfo[x,2], pch=19, xlab= 'kb from intron to poly(A) site' , ylim=c(0,1),ylab=expression(paste('median ',Sigma)),cex=.5,cex.main=1.2,xaxt='n',cex.axis=.8,yaxt='n', barcol=grey.colors(1,start=0.8))
     formatAxes_kb()
+    
+    # Plot fits
     lines(log10(xx<- 10^seq((0),log10(2000000),length.out=1000)),MeanGamma2(xx,coef(FitData[[x]])[1],coef(FitData[[x]])[2],coef(FitData[[x]])[3], coef(FitData[[x]])[4]),type='l',col=blueCol,lwd=2)  
-    lines(log10(xx<- 10^seq((0),log10(2000000),length.out=1000)),MeanExp(xx,coef(FitData2[[x]])[1],coef(FitData2[[x]])[2]),type='l',col=blueCol,lwd=2,lty=2)    
+    
+    if (x< 9){
+        lines(log10(xx<- 10^seq((0),log10(2000000),length.out=1000)),MeanGamma2(xx,coef(FitData2[[x]])[1],coef(FitData2[[x]])[2],coef(FitData[[x]])[3], coef(FitData2[[x]])[4]),type='l',col=blueCol,lwd=2,lty=2)    
+      
+      lines(log10(xx),MeanGamma2(xx,coef(FitData_RT2[[x]])[1],coef(FitData_RT2[[x]])[2],coef(FitData_RT2[[x]])[3], coef(FitData_RT2[[x]])[4]),type='l',col=purpleCol,lwd=1, lty=3)  
+      
+      lines(log10(xx),MeanGamma2(xx,coef(FitData_noRT2[[x]])[1],coef(FitData_noRT2[[x]])[2],coef(FitData_noRT2[[x]])[3], coef(FitData_noRT2[[x]])[4]),type='l',col=purpleCol,lwd=1,lty=2)  
+    }
     
     # Put some text up:
-    text(4,0.3,sprintf("kb/splice: %.0f\n RT: %.0f kb\n A: %.2f\n\n%.1f%% of genes highly\n poly-adenylated",
+    text(4,0.3,sprintf("kb/splice: %.0f\n RT: %.0f kb\n A: %.2f\n\n%.1f%% of genes highly\n cleaved",
       1/coef(FitData[[x]])[2],coef(FitData[[x]])[4],coef(FitData[[x]])[3], polyA80[x]*100), adj=0)
     
    }

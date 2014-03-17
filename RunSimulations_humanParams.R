@@ -4,7 +4,7 @@
 ################################################################################################################
 ################################################################################################################
 
-load(sprintf("%s/ExonPipeline/hg19/Multiple_CellTypes2_splicing100.RData",homedir)
+load(sprintf("%s/ExonPipeline/hg19/Multiple_CellTypes2_splicing100.RData",homedir))
 load(sprintf("%s/PlottedData_new3.RData",dataDir)) 
 
 

@@ -64,7 +64,7 @@ eff2 = melt(efficiencyData[,c(!grepl('(RT)|(plain)',dimnames(efficiencyData)[[2]
 plainMedians = sapply(c(1,4),function(size)sapply(1:5,function(num)median(subset(efficiencyData,intronCountGroups==num & GeneSize==size)$myEfficiencies_plain, na.rm=T)))
 
 
-plot.dev(sprintf("GenomeSimulations_numIntrons_by_geneSize_nucElong_147_noAdjust_median%.3f_Extreme_only_3C.pdf",Stability_div),'pdf',height=2,width=5)  
+plot.dev(sprintf("%s_GenomeSimulations_numIntrons_by_geneSize_nucElong_147_noAdjust_median%.3f_Extreme_only_3C.pdf",settings$CommonName,Stability_div),'pdf',height=2,width=5)  
 cex=0.6;width=0.4;
 par(cex=cex,mai=c(.02,.3,.02,.02),pch=pch)
 
@@ -75,7 +75,7 @@ arrows(x[1,],rep(plainMedians,3),x[2,],rep(plainMedians,3),col='maroon',angle=13
 plot.off()
 
 
-plot.dev("GenomeSimulations_readThrough_comparisons_chromElong_147_noAdjust_2only_2D.pdf",'pdf',width=5,height=1.5)
+plot.dev(sprintf("%s_GenomeSimulations_readThrough_comparisons_chromElong_147_noAdjust_2only_2D.pdf",settings$CommonName),'pdf',width=5,height=1.5)
 par(mfcol=c(1,1),cex=0.5,mai=c(0.3,0.2,0.01,0.01))
 notch=F; wid=.21;bw=0.1085; offset = 1.4; xlim=c(0.5,9.2); widthFraction = 0.4
 cols =c(brewer.pal(9,"YlGnBu")[5:9],brewer.pal(9,"OrRd")[5:9])

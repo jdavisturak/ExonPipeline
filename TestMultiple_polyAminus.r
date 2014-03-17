@@ -3,154 +3,161 @@ library(gplots)
 library(RColorBrewer)
 library(Hmisc)
 
-source("/home/jeremy/ExonPipeline/ExonPipeline_functions.r")
-source("/home/jeremy/ExonPipeline/ExonPipeline_analysis_and_plotting_Functions.r")
-source("/home/home/jeremy/Code/useful_R/useful_R.r")
-source("/home/jeremy/ExonPipeline/ExonPipeline_simulate_model.r")
+homedir = '/Volumes//bigmax.ucsd.edu/' # /home/jeremy
 
-setwd("/home/jeremy/ExonPipeline/hg19")
-load("PlottedData_new3.RData")
+gitDir = "~/Code/"
 
-dataDir = '/home/RNAseq/Tilgner/Nucleus/'
+source(sprintf("%s/ExonPipeline/ExonPipeline_functions.r",gitDir))
+source(sprintf("%s/ExonPipeline/ExonPipeline_analysis_and_plotting_Functions.r",gitDir))
+source(sprintf("%s/useful_R/useful_R.r",gitDir))
+source(sprintf("%s/ExonPipeline/ExonPipeline_simulate_model.r",gitDir))
+
 ChromInfo  = cbind(c( "Chromatin.ssj","PolyAMinus.ssj","PolyAPlus.ssj","Gm12878.ssj","H1hesc.ssj","Helas3.ssj","Hepg2.ssj","Huvec.ssj","Nhek.ssj"), # ssj file
-c('K562_Chromatin','K562_Nucleus A(-)','K562_Nucleus A(+)',"Gm12878","H1hesc","Helas3","Hepg2","Huvec","Nhek"),
-c('K562','K562','K562',"Gm12878","H1hesc","Helas3","Hepg2","Huvec","Nhek"))
-
- 
-##########################################################
-#### GET SSJ data  (Dmitri D. Pervouchine)
-##########################################################
-
-splicingData = list()
-splicingData_Theta5 = list()
-splicingData_Theta3 = list()
-SplicingMerged = matrix(NA,nr=nrow(mergedData), nc = nrow(ChromInfo))
-mergedData$coSI_ID = paste(mergedData$chr,rowMins(mergedData[,c('start','end')])+1,rowMaxes(mergedData[,c('start','end')]),1,sep='_')
-
-for(i in 1:nrow(ChromInfo)){
-  dat=read.delim(paste(dataDir,ChromInfo[i,1],sep=""), head=F,stringsAsFactors=F)
-  names(dat) = c('coSI_ID','count53', 'count5X', 'countX3', 'count50', 'count03')
-  print(dim(dat))
-  
-  # Compute Theta5, Theta3  (http://bioinformatics.oxfordjournals.org/content/early/2012/11/21/bioinformatics.bts678.full.pdf+html)
-  dat$Denom5 = dat$count53 + dat$count5X + dat$count50
-  dat$Theta5 = (dat$count53 + dat$count5X) / dat$Denom5
-  dat$Denom3 = dat$count53 + dat$countX3 + dat$count03
-  dat$Theta3 = (dat$count53 + dat$countX3) / dat$Denom3
-
-  # My way:
-  #dat$DenomJer = dat$count53 + (dat$count50 + dat$count03)/2
-  dat$DenomJer = dat$count53 + (dat$count50 + dat$count03)/2 + dat$count5X+dat$countX3
-  dat$SpliceJer = dat$count53 / dat$DenomJer
-  
-  cutoff=15
-  #splicingData[[i]] = dat[dat$DenomJer  > 15,]
-  splicingData[[i]] = dat[dat$DenomJer  > cutoff & dat$count5X < 1 & dat$countX3 < 1,]
-  splicingData_Theta5[[i]] = dat[dat$Denom5  > cutoff,]
-  splicingData_Theta3[[i]] = dat[dat$Denom3  > cutoff,]  
-  
-  SplicingMerged[,i] = splicingData[[i]]$SpliceJer[match(mergedData$coSI_ID, splicingData[[i]]$coSI_ID)]
-
-}                                                                                                                      
-
-mergedData2 = cbind(mergedData, SplicingMerged)
-names(mergedData2)[ncol(mergedData) + (1:ncol(SplicingMerged))] = ChromInfo[,2]
+                   c('K562_Chromatin','K562_Nucleus A(-)','K562_Nucleus A(+)',"Gm12878","H1hesc","Helas3","Hepg2","Huvec","Nhek"),
+                   c('K562','K562','K562',"Gm12878","H1hesc","Helas3","Hepg2","Huvec","Nhek"))
 
 
 
-#############################################################################
-### New 10/29/13: Analyze Cytoplasmic poly(A) RNAseq of these guys first, THEN  do the rest
-#############################################################################
+load("Spring2014_Human_multiple_cellTypes_splicingInfo.RData")
 
-dataDir = '/home/RNAseq/Tilgner/Cytosol/'
-getNames = function(file)read.delim(file, stringsAsFactors=F,head=F)[,1]
-getFileData = function(file)read.delim(file, stringsAsFactors=F,head=F)[,4]
-
-f=function(cell,rep)cbind(sprintf("wgEncodeCshlLongRnaSeq%sCytosolPapPlusRawSigRep%d.bigWig",cell,rep),sprintf("wgEncodeCshlLongRnaSeq%sCytosolPapMinusRawSigRep%d.bigWig",cell,rep))
-
-myLists = list(K562=f("K562",c(1,2)),Gm12878=f("Gm12878",c(1,2)), H1hesc=f("H1hesc",2),Helas3=f("Helas3",c(1,2)),
-   Hepg2=f("Hepg2",c(1,2)), Huvec=f("Huvec",c(3,4)), Nhek=f("Nhek",c(3,4)) )
-IDs=sub("(.*)_.*","\\1",getNames(paste(dataDir,myLists[[1]][1,1],".refseq.Up",sep="")))
-strand = refseq$strand[match(IDs,refseq$UniqueID)]  
-
-myCleavedFractions = list()   
-
-## For each of the lists, read in 'Up' and 'Down' reads to determine overlaps:     
-for (i in 1:length(myLists)){
-  Down.Plus = sapply(paste(dataDir,myLists[[i]][,1],".refseq.Down",sep=""),getFileData)
-  Down.Minus = sapply(paste(dataDir,myLists[[i]][,2],".refseq.Down",sep=""),getFileData)
-  Up.Plus = sapply(paste(dataDir,myLists[[i]][,1],".refseq.Up",sep=""),getFileData)
-  Up.Minus = sapply(paste(dataDir,myLists[[i]][,2],".refseq.Up",sep=""),getFileData)
-  
-  rownames(Down.Plus) = rownames(Down.Minus) = rownames(Up.Plus) = rownames(Up.Minus) = IDs
-  Up = Up.Plus
-  Down = Down.Plus
-  Up[strand=='-',] = Up.Minus[strand=='-',]
-  Down[strand=='-',] = Down.Minus[strand=='-',]
-  
-  ## Now I need to filter by some cutoff and then take the average
-  AllCleavedFraction = Up/(Up + Down)#1-Down/Up
-  AllCleavedFraction2 = AllCleavedFraction
-  AllCleavedFraction2[Up + Down <= 500] <- NA # This is equivalent to ~5 reads if length is 100 bp
-  myCleavedFractions[[i]] = rowMeans(AllCleavedFraction2)      
-}
-
-names(myCleavedFractions) = names(myLists)
-
-
-## Now for all of the cell types, omit the splicing data from genes that cleaved less than 95%
-mergedData3 = mergedData2
-# Now loop through ChromInfo
-for ( i in 1:nrow(ChromInfo)){
-  myColumn = ChromInfo[i,2]
-  myCellType = ChromInfo[i,3]
-  
-  mergedData3[,myColumn][mergedData3$UniqueID %in% names(myCleavedFractions[[myCellType]][myCleavedFractions[[myCellType]] < 0.95])] <-NA  
-}
-
-# This summarizes how many introns passed the cutoffs
-sapply(ChromInfo[,2],function(x)c(length(which(!is.na(mergedData2[,x]))),length(which(!is.na(mergedData3[,x])))))
-#     K562_Chromatin K562_Nucleus A(-) K562_Nucleus A(+) Gm12878 H1hesc Helas3
-#[1,]          27332             23790             27918   23080  14521  22624
-#[2,]          21513             18505             22116   16179   9099  15870
-#     Hepg2 Huvec  Nhek
-#[1,] 25661 24013 20791
-#[2,] 19117 16602 15189
-
-
-#############################################################################
-### New 10/31/13: Analyze NUCLEAR poly(A) RNAseq, 
-# and just report the % of genes saved above that have high cleavage levels in this sample
-############################################################################
-
-dataDir = '/home/RNAseq/Tilgner/Nucleus/'
-myNuclear_CleavedFractions = list()   
-
-for (i in 1:nrow(ChromInfo)){
-  Name = sub(".ssj","",ChromInfo[i,1])
-                  
-  Down.Plus = sapply(paste(dataDir,Name,".refseq.A.plus.Down",sep=""),getFileData)
-  Down.Minus = sapply(paste(dataDir,Name,".refseq.A.minus.Down",sep=""),getFileData)
-  Up.Plus = sapply(paste(dataDir,Name,".refseq.A.plus.Up",sep=""),getFileData)
-  Up.Minus = sapply(paste(dataDir,Name,".refseq.A.minus.Up",sep=""),getFileData)
-   
-  rownames(Down.Plus) = rownames(Down.Minus) = rownames(Up.Plus) = rownames(Up.Minus) = IDs
-  Up = Up.Plus
-  Down = Down.Plus
-  Up[strand=='-',] = Up.Minus[strand=='-',]
-  Down[strand=='-',] = Down.Minus[strand=='-',]
-  
-  ## Now I need to filter by some cutoff and then take the average
-  AllCleavedFraction = Up/(Up + Down)#1-Down/Up
-  AllCleavedFraction2 = AllCleavedFraction
-  AllCleavedFraction2[Up + Down <= 500] <- NA # This is equivalent to ~5 reads if length is 100 bp
-  myNuclear_CleavedFractions[[i]] = rowMeans(AllCleavedFraction2)      
-}
-
-names(myNuclear_CleavedFractions) = names(myLists)
-
-save(myCleavedFractions,myNuclear_CleavedFractions,mergedData2,mergedData3, file='Spring2014_Human_multiple_cellTypes_splicingInfo.RData')
-print("Finished Saving the first part")
+# ##########################################################
+# #### GET SSJ data  (Dmitri D. Pervouchine)
+# ##########################################################
+# dataDir = sprintf("%s/ExonPipeline/hg19",homedir)
+# setwd(dataDir)
+# load("PlottedData_new3.RData")
+#
+# dataDir = '/home/RNAseq/Tilgner/Nucleus/'
+# splicingData = list()
+# splicingData_Theta5 = list()
+# splicingData_Theta3 = list()
+# SplicingMerged = matrix(NA,nr=nrow(mergedData), nc = nrow(ChromInfo))
+# mergedData$coSI_ID = paste(mergedData$chr,rowMins(mergedData[,c('start','end')])+1,rowMaxes(mergedData[,c('start','end')]),1,sep='_')
+# 
+# for(i in 1:nrow(ChromInfo)){
+#   dat=read.delim(paste(dataDir,ChromInfo[i,1],sep=""), head=F,stringsAsFactors=F)
+#   names(dat) = c('coSI_ID','count53', 'count5X', 'countX3', 'count50', 'count03')
+#   print(dim(dat))
+#   
+#   # Compute Theta5, Theta3  (http://bioinformatics.oxfordjournals.org/content/early/2012/11/21/bioinformatics.bts678.full.pdf+html)
+#   dat$Denom5 = dat$count53 + dat$count5X + dat$count50
+#   dat$Theta5 = (dat$count53 + dat$count5X) / dat$Denom5
+#   dat$Denom3 = dat$count53 + dat$countX3 + dat$count03
+#   dat$Theta3 = (dat$count53 + dat$countX3) / dat$Denom3
+# 
+#   # My way:
+#   #dat$DenomJer = dat$count53 + (dat$count50 + dat$count03)/2
+#   dat$DenomJer = dat$count53 + (dat$count50 + dat$count03)/2 + dat$count5X+dat$countX3
+#   dat$SpliceJer = dat$count53 / dat$DenomJer
+#   
+#   cutoff=15
+#   #splicingData[[i]] = dat[dat$DenomJer  > 15,]
+#   splicingData[[i]] = dat[dat$DenomJer  > cutoff & dat$count5X < 1 & dat$countX3 < 1,] # new
+#   splicingData_Theta5[[i]] = dat[dat$Denom5  > cutoff,]
+#   splicingData_Theta3[[i]] = dat[dat$Denom3  > cutoff,]  
+#   
+#   SplicingMerged[,i] = splicingData[[i]]$SpliceJer[match(mergedData$coSI_ID, splicingData[[i]]$coSI_ID)]
+# 
+# }                                                                                                                      
+# 
+# mergedData2 = cbind(mergedData, SplicingMerged)
+# names(mergedData2)[ncol(mergedData) + (1:ncol(SplicingMerged))] = ChromInfo[,2]
+# 
+# 
+# 
+# #############################################################################
+# ### New 10/29/13: Analyze Cytoplasmic poly(A) RNAseq of these guys first, THEN  do the rest
+# #############################################################################
+# 
+# dataDir = '/home/RNAseq/Tilgner/Cytosol/'
+# getNames = function(file)read.delim(file, stringsAsFactors=F,head=F)[,1]
+# getFileData = function(file)read.delim(file, stringsAsFactors=F,head=F)[,4]
+# 
+# f=function(cell,rep)cbind(sprintf("wgEncodeCshlLongRnaSeq%sCytosolPapPlusRawSigRep%d.bigWig",cell,rep),sprintf("wgEncodeCshlLongRnaSeq%sCytosolPapMinusRawSigRep%d.bigWig",cell,rep))
+# 
+# myLists = list(K562=f("K562",c(1,2)),Gm12878=f("Gm12878",c(1,2)), H1hesc=f("H1hesc",2),Helas3=f("Helas3",c(1,2)),
+#    Hepg2=f("Hepg2",c(1,2)), Huvec=f("Huvec",c(3,4)), Nhek=f("Nhek",c(3,4)) )
+# IDs=sub("(.*)_.*","\\1",getNames(paste(dataDir,myLists[[1]][1,1],".refseq.Up",sep="")))
+# strand = refseq$strand[match(IDs,refseq$UniqueID)]  
+# 
+# myCleavedFractions = list()   
+# 
+# ## For each of the lists, read in 'Up' and 'Down' reads to determine overlaps:     
+# for (i in 1:length(myLists)){
+#   Down.Plus = sapply(paste(dataDir,myLists[[i]][,1],".refseq.Down",sep=""),getFileData)
+#   Down.Minus = sapply(paste(dataDir,myLists[[i]][,2],".refseq.Down",sep=""),getFileData)
+#   Up.Plus = sapply(paste(dataDir,myLists[[i]][,1],".refseq.Up",sep=""),getFileData)
+#   Up.Minus = sapply(paste(dataDir,myLists[[i]][,2],".refseq.Up",sep=""),getFileData)
+#   
+#   rownames(Down.Plus) = rownames(Down.Minus) = rownames(Up.Plus) = rownames(Up.Minus) = IDs
+#   Up = Up.Plus
+#   Down = Down.Plus
+#   Up[strand=='-',] = Up.Minus[strand=='-',]
+#   Down[strand=='-',] = Down.Minus[strand=='-',]
+#   
+#   ## Now I need to filter by some cutoff and then take the average
+#   AllCleavedFraction = Up/(Up + Down)#1-Down/Up
+#   AllCleavedFraction2 = AllCleavedFraction
+#   AllCleavedFraction2[Up + Down <= 500] <- NA # This is equivalent to ~5 reads if length is 100 bp
+#   myCleavedFractions[[i]] = rowMeans(AllCleavedFraction2)      
+# }
+# 
+# names(myCleavedFractions) = names(myLists)
+# 
+# 
+# ## Now for all of the cell types, omit the splicing data from genes that cleaved less than 95%
+# mergedData3 = mergedData2
+# # Now loop through ChromInfo
+# for ( i in 1:nrow(ChromInfo)){
+#   myColumn = ChromInfo[i,2]
+#   myCellType = ChromInfo[i,3]
+#   
+#   mergedData3[,myColumn][mergedData3$UniqueID %in% names(myCleavedFractions[[myCellType]][myCleavedFractions[[myCellType]] < 0.95])] <-NA  
+# }
+# 
+# # This summarizes how many introns passed the cutoffs
+# sapply(ChromInfo[,2],function(x)c(length(which(!is.na(mergedData2[,x]))),length(which(!is.na(mergedData3[,x])))))
+# #     K562_Chromatin K562_Nucleus A(-) K562_Nucleus A(+) Gm12878 H1hesc Helas3
+# #[1,]          27332             23790             27918   23080  14521  22624
+# #[2,]          21513             18505             22116   16179   9099  15870
+# #     Hepg2 Huvec  Nhek
+# #[1,] 25661 24013 20791
+# #[2,] 19117 16602 15189
+# 
+# 
+# #############################################################################
+# ### New 10/31/13: Analyze NUCLEAR poly(A) RNAseq, 
+# # and just report the % of genes saved above that have high cleavage levels in this sample
+# ############################################################################
+# 
+# dataDir = '/home/RNAseq/Tilgner/Nucleus/'
+# myNuclear_CleavedFractions = list()   
+# 
+# for (i in 1:nrow(ChromInfo)){
+#   Name = sub(".ssj","",ChromInfo[i,1])
+#                   
+#   Down.Plus = sapply(paste(dataDir,Name,".refseq.A.plus.Down",sep=""),getFileData)
+#   Down.Minus = sapply(paste(dataDir,Name,".refseq.A.minus.Down",sep=""),getFileData)
+#   Up.Plus = sapply(paste(dataDir,Name,".refseq.A.plus.Up",sep=""),getFileData)
+#   Up.Minus = sapply(paste(dataDir,Name,".refseq.A.minus.Up",sep=""),getFileData)
+#    
+#   rownames(Down.Plus) = rownames(Down.Minus) = rownames(Up.Plus) = rownames(Up.Minus) = IDs
+#   Up = Up.Plus
+#   Down = Down.Plus
+#   Up[strand=='-',] = Up.Minus[strand=='-',]
+#   Down[strand=='-',] = Down.Minus[strand=='-',]
+#   
+#   ## Now I need to filter by some cutoff and then take the average
+#   AllCleavedFraction = Up/(Up + Down)#1-Down/Up
+#   AllCleavedFraction2 = AllCleavedFraction
+#   AllCleavedFraction2[Up + Down <= 500] <- NA # This is equivalent to ~5 reads if length is 100 bp
+#   myNuclear_CleavedFractions[[i]] = rowMeans(AllCleavedFraction2)      
+# }
+# 
+# names(myNuclear_CleavedFractions) = names(myLists)
+# 
+# save(myCleavedFractions,myNuclear_CleavedFractions,mergedData2,mergedData3, file='Spring2014_Human_multiple_cellTypes_splicingInfo.RData')
+# print("Finished Saving the first part")
 
 
 ## For all genes in mergedData3 (those that have evidence of correct splicing in Cytoplasmic)
@@ -165,9 +172,6 @@ for ( i in 1:nrow(ChromInfo)){
 
 # Obtain a list of genes that have cleavage Ratio of 0.8 or higher
 polyA80 = sapply(1:9,function(i)try(length(which(myPolyA[[i]] > 0.8))/length(myPolyA[[i]])))
-
-
-
 
 
 #############################################################################
@@ -194,7 +198,7 @@ sem=function(x,na.rm=T){
   sd(x,na.rm=na.rm)/sqrt(LEN)
 }
 
-for(N in c(100,1000)) {
+for(N in c(100,1000,10000)) {
   A_min = 0;A_max=1
   #A_min=0.9; A_max=0.9
   FitData = list()
@@ -211,27 +215,42 @@ for(N in c(100,1000)) {
     if(ChromInfo[i,2] !='Nhek')
       starts = c(g=1,k=5e-5,A=A_max,B=1000)                                       
 
-    QuantileData[[i]] = getQuantilMedians(mergedData3[!is.na(mergedData3[,ChromInfo[i,2]]),],column=ChromInfo[i,2],N=N)
-    SDData[[i]] = getQuantilMedians(mergedData3[!is.na(mergedData3[,ChromInfo[i,2]]),],column=ChromInfo[i,2],N=N, func=sem)
-    
-    # Fit to exponential + read-through (3 free parameters)
-    FitData[[i]] =  nls(median ~ MeanGamma2(LengthMedian,g,k,A,B), data=QuantileData[[i]],start=starts,lower=c(1,0,A_min,1),upper=c(1,Inf,A_max,Inf),algo='port');
-    
-    # Fit to exponential with no read-through (2 free parameters)
-    #FitData2[[i]] =  nls(median ~ MeanExp(LengthMedian,k,A), data=QuantileData[[i]],start=starts[2:3],lower=c(0,A_min),upper=c(Inf,A_max),algo='port');
-    FitData2[[i]] = nls(median ~ MeanGamma2(LengthMedian,g,k,A,B), data=QuantileData[[i]],start=c(starts[1],k=0.01,starts[3],B=0), lower=c(1,0,A_min,0),upper=c(1,Inf,A_max,0),algo='port');
-    
-    # Fit to Gamma with g=2, RT (3 params)
-    FitData_RT2[[i]] =  nls(median ~ MeanGamma2(LengthMedian,g,k,A,B), data=QuantileData[[i]],start=c(g=2,starts[-1]), lower=c(2,0,A_min,1),upper=c(2,Inf,A_max,Inf),algo='port');
-    
-    if(i < 9){
-      # Fit to Gamma with g=2, no RT (2 params)
-      FitData_noRT2[[i]] =  nls(median ~ MeanGamma2(LengthMedian,g,k,A,B), data=QuantileData[[i]],start=c(g=2,starts[2:3],B=0), lower=c(2,0,A_min,0),upper=c(2,Inf,A_max,0),algo='port');
+    if (N <= 1000 | i==2){
+      QuantileData[[i]] = getQuantilMedians(mergedData3[!is.na(mergedData3[,ChromInfo[i,2]]),],column=ChromInfo[i,2],N=N)
+      SDData[[i]] = getQuantilMedians(mergedData3[!is.na(mergedData3[,ChromInfo[i,2]]),],column=ChromInfo[i,2],N=N, func=sem)
     }
     
-    #FitData3[[i]] =  nls(median ~ MeanGamma3(LengthMedian,g,k,A,B), data=QuantileData[[i]],start=c(g=1,k=5e-5,A=1/10000,B=5000),lower=c(1,0,1/100000000,1),upper=c(1,Inf,1/1000,Inf),algo='port');
+    if (N <= 1000 | i==2){
+        # Fit to exponential with no read-through (2 free parameters)
+        #FitData2[[i]] =  nls(median ~ MeanExp(LengthMedian,k,A), data=QuantileData[[i]],start=starts[2:3],lower=c(0,A_min),upper=c(Inf,A_max),algo='port');
+          FitData2[[i]] = nls(median ~ MeanGamma2(LengthMedian,g,k,A,B), data=QuantileData[[i]],start=c(starts[1],k=0.01,starts[3],B=0), lower=c(1,0,A_min,0),upper=c(1,Inf,A_max,0),algo='port');
+                
+      # Fit to exponential + read-through (3 free parameters)
+      FitData[[i]] =  nls(median ~ MeanGamma2(LengthMedian,g,k,A,B), data=QuantileData[[i]],start=starts,lower=c(1,0,A_min,1),upper=c(1,Inf,A_max,Inf),algo='port');
+    }
+    
+    if (N <= 1000){
+      # Fit to Gamma with g=2, RT (3 params)
+      FitData_RT2[[i]] =  nls(median ~ MeanGamma2(LengthMedian,g,k,A,B), data=QuantileData[[i]],start=c(g=2,starts[-1]), lower=c(2,0,A_min,1),upper=c(2,Inf,A_max,Inf),algo='port');
+      
+      if(i < 9){
+        # Fit to Gamma with g=2, no RT (2 params)
+        FitData_noRT2[[i]] =  nls(median ~ MeanGamma2(LengthMedian,g,k,A,B), data=QuantileData[[i]],start=c(g=2,k=0.01,starts[3],B=0), lower=c(2,0,A_min,0),upper=c(2,Inf,A_max,0),algo='port');
+      }
+    
+    }
   }
                                                                          
+  
+ 
+  t(sapply(FitData,coef))->fitCoefs
+  t(sapply(FitData2,coef))->fitCoefs2
+  try(rownames(fitCoefs2)= rownames(fitCoefs) <- ChromInfo[,2])
+  save(QuantileData, SDData, FitData,FitData2,FitData_RT2, FitData_noRT2,  fitCoefs,fitCoefs2, file=sprintf('Multiple_CellTypes2_splicing%d.RData',N))
+#   for(N in c(100,1000,10000)) {
+#     load(sprintf('Multiple_CellTypes2_splicing%d.RData',N))
+
+  if(N > 1000) next()
   
   #########################################################################
   ## Plotting                                                               
@@ -249,7 +268,7 @@ for(N in c(100,1000)) {
     lines(log10(xx<- 10^seq((0),log10(2000000),length.out=1000)),MeanGamma2(xx,coef(FitData[[x]])[1],coef(FitData[[x]])[2],coef(FitData[[x]])[3], coef(FitData[[x]])[4]),type='l',col=blueCol,lwd=2)  
     
     if (x< 9){
-        lines(log10(xx<- 10^seq((0),log10(2000000),length.out=1000)),MeanGamma2(xx,coef(FitData2[[x]])[1],coef(FitData2[[x]])[2],coef(FitData[[x]])[3], coef(FitData2[[x]])[4]),type='l',col=blueCol,lwd=2,lty=2)    
+        lines(log10(xx<- 10^seq((0),log10(2000000),length.out=1000)),MeanGamma2(xx,coef(FitData2[[x]])[1],coef(FitData2[[x]])[2],coef(FitData2[[x]])[3], coef(FitData2[[x]])[4]),type='l',col=blueCol,lwd=2,lty=2)    
       
       lines(log10(xx),MeanGamma2(xx,coef(FitData_RT2[[x]])[1],coef(FitData_RT2[[x]])[2],coef(FitData_RT2[[x]])[3], coef(FitData_RT2[[x]])[4]),type='l',col=purpleCol,lwd=1, lty=3)  
       
@@ -257,16 +276,12 @@ for(N in c(100,1000)) {
     }
     
     # Put some text up:
-    text(4,0.3,sprintf("kb/splice: %.0f\n RT: %.0f kb\n A: %.2f\n\n%.1f%% of genes highly\n cleaved",
-      1/coef(FitData[[x]])[2],coef(FitData[[x]])[4],coef(FitData[[x]])[3], polyA80[x]*100), adj=0)
+    text(4,0.3,sprintf("kb/splice: %.0f\n RT: %.0f kb\n %s: %.2f\n\n%.1f%% of genes highly\n cleaved",
+      1/coef(FitData[[x]])[2],coef(FitData[[x]])[4],expression(alpha),coef(FitData[[x]])[3], polyA80[x]*100), adj=0)
     
    }
   plot.off()
      
-  t(sapply(FitData,coef))->fitCoefs
-  t(sapply(FitData2,coef))->fitCoefs2
-  rownames(fitCoefs2)= rownames(fitCoefs) <- ChromInfo[,2]
-  save(QuantileData, mergedData3, FitData,FitData2,  fitCoefs,fitCoefs2, file=sprintf('Multiple_CellTypes2_splicing%d.RData',N))
   fitCoefs
   fitCoefs2
 }

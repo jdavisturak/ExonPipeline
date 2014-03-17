@@ -173,11 +173,11 @@ for (intervals in list(
   )){
   UP=  intervals$UP
   DOWN=intervals$DOWN
-  refseq$polyAstart = refseq$Ends + UP   * ifelse(refseq$strand=='+',  1, -1)
-  refseq$polyAend =   refseq$Ends + DOWN * ifelse(refseq$strand=='+', -1,  1)
+  refseq$polyAstart = refseq$Ends - UP   * ifelse(refseq$strand=='+',  1, -1)
+  refseq$polyAend =   refseq$Ends + DOWN * ifelse(refseq$strand=='+', 1,  -1)
   
   write.delim(subset(refseq,strand=='+' ,c('chrom','polyAstart','polyAend','UniqueID','exonCount','strand')),File=sprintf('%s_polyA_-%dTo%d+.bed',settings$CommonName,UP,DOWN),col.names=F)
-  write.delim(subset(refseq,strand=='-' ,c('chrom','polyAstart','polyAend','UniqueID','exonCount','strand')),File=sprintf('%s_polyA_-%dTo%d-.bed',settings$CommonName,UP,DOWN),col.names=F)
+  write.delim(subset(refseq,strand=='-' ,c('chrom','polyAend','polyAstart','UniqueID','exonCount','strand')),File=sprintf('%s_polyA_-%dTo%d-.bed',settings$CommonName,UP,DOWN),col.names=F)
 }  
 
 

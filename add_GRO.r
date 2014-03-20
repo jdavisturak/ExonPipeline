@@ -15,10 +15,10 @@ load("PlottedData_withGRO-redone_new3.RData")
 ###load("GRO_Data.RData")
 ### 9/11/13
 ### Use Karmel's redone GRO-seq algorithm 
-GRO3 =  makeGROdata2(inputFile="/home/RNAseq/Glass/post_gene_transcripts.txt", subset(refseq, name %in% refseq.noPseudogenes$name),outputFile = "GRO_Data_redone.RData", geneDistance=1000)
-dataWithGRO = merge(mergedData, GRO3 , by='UniqueID',all.x=T)
-dataWithGRO$RunonGroup = quantileGroups(dataWithGRO$Runon,5)
-save(dataWithGRO, file="PlottedData_withGRO-redone_new3.RData")
+# GRO3 =  makeGROdata2(inputFile="/home/RNAseq/Glass/post_gene_transcripts.txt", subset(refseq, name %in% refseq.noPseudogenes$name),outputFile = "GRO_Data_redone.RData", geneDistance=1000)
+# dataWithGRO = merge(mergedData, GRO3 , by='UniqueID',all.x=T)
+# dataWithGRO$RunonGroup = quantileGroups(dataWithGRO$Runon,5)
+# save(dataWithGRO, file="PlottedData_withGRO-redone_new3.RData")
 
 
 ############################################################################
@@ -58,7 +58,7 @@ load("/home/RNAseq/Smale/SmaleCyt_cleavedFractions_refseq.RData")
 # I got rid of genes that I could determine to be non-canonically poly-adenylated: had at least 5 reads and less than 95% cleavage ratio
 dataWithGRO3 = subset(  dataWithGRO2,!(UniqueID  %in% rownames(subset(AllCleavedAverages,Cyt < 0.95))))
 length(unique(subset(dataWithGRO3,!is.na(Runon))$UniqueID)) # 3594 genes
-
+save(dataWithGRO3, file='Mouse_dataWithGRO3_polyAfilt.RData')
 wilcox.test(Runon~isHK,dataWithGRO3) # very signif
 
 summary(subset(dataWithGRO3,isHK==0)$Runon) 
@@ -103,6 +103,20 @@ title(ylab='density',mgp=c(0.1,0,0))
 abline(v=V<-median(log10(dataWithGRO3$Runon),na.rm=T),lty=2)
 axis(1,at=V,lab=round(10^V),las=2)
 plot.off()
+
+
+### plot Read-through based on my 19 categories ....
+
+par(mfrow=c(2,2))
+invisible(sapply(1:4, function(size){
+  
+  boxplot(log10(Runon) ~ intronCountGroups, data=subset(dataWithGRO3, GeneSize_hg19==size), ylim=c(2,5),pch=19, ylab='Read-through (bp)', notch=T,yaxt='n',las=2, main=c('Short','Med Short','Med Long','Long')[size])
+  axis(2,at=1:5,lab=sprintf("%d",(10^(1:5))))
+
+}))
+
+
+
 
 
 

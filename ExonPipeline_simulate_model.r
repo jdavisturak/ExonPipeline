@@ -1,15 +1,16 @@
 ## Function to simulate genes/model
 
 # First just need to go from Dist2End to splicing
-modelIntron = function(Dist2End=NA, k_splice, ElongRate=NA,Time=NA){
+modelIntron = function(Dist2End=NA, k_splice, ElongRate=NA,Time=NA, G=1){
   if(is.na(Time[1])){
     Time = Dist2End/ElongRate
   }
-  1-exp(-k_splice*Time)  
+  pgamma(Time, shape=G, rate=k_splice)
+  #1-exp(-k_splice*Time)  
 }
 
-modelGeneEfficiency = function(Dists=NA,ks,Elongs=NA,Time=NA){
-  prod(modelIntron(Dists,ks,Elongs,Time))
+modelGeneEfficiency = function(Dists=NA,ks,Elongs=NA,Time=NA,G=1){
+  prod(modelIntron(Dists,ks,Elongs,Time,G))
 }
 
 
@@ -62,7 +63,7 @@ getTimes = function(Dists, ModElongs, Elong=3000, extraDist=rep(80,length(Dists)
 }
 
 
-simulateGene = function(myData, Elong=3000, K_splice=1, Stability_div=4, Acceptor_div=3, extraDist=80, maxAcceptor=2.678306, readThrough=1000,Stability_exp=.25){
+simulateGene = function(myData, Elong=3000, K_splice=1, G=1,Stability_div=4, Acceptor_div=3, extraDist=80, maxAcceptor=2.678306, readThrough=1000,Stability_exp=.25){
   # This should be rows from mergedData
 
   #ORDER by feature
@@ -103,7 +104,7 @@ simulateGene = function(myData, Elong=3000, K_splice=1, Stability_div=4, Accepto
   Ks[length(Ks)] = K_splice * (1 + 1/Acceptor_div)
   
   # Simulate!
-  eff=modelGeneEfficiency(ks=Ks,Time=Times)    
+  eff=modelGeneEfficiency(ks=Ks,Time=Times,G=G)    
     
   eff
  } 

@@ -40,10 +40,21 @@ HKlist = read.delim("/home/jeremy/ExonPipeline/hg19/HouseKeepingGenes.txt",skip=
 mergedData = mergeLastData(exons,energyData,donorData,acceptorData,bins*180,HKlist)
 
 ## Get rid of pseudo-genes 
-# awk 'NR > 1{printf "chr%s\t%s\t%s\t%s\t0\t%s\n",$2,$3,$4,$1,$5 }' pseudogenes.txt > pseudogenes.bed
-# awk 'NR >1{printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",$3,$5,$6,$2,$12,$4,$13,$9,$10,$11 }' refGene.txt > refGene.bed
-# awk 'NR == 1{printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",$3,$5,$6,$2,$12,$4,$13,$9,$10,$11 }' refGene.txt > refGene_notPseudo.txt
-# bedtools intersect -a refGene.bed -b pseudogenes.bed -s -v >> refGene_notPseudo.txt
+if (!file.exists('refGene_notPseudo.txt')){
+  # Make the new file
+  if (!file.exists('pseudogenes.txt')){
+    # need to download ... try downloading from pseudogene.org
+    stop("Try downloading the pseudogenes file from pseudogene.org, and rename it to pseudogenes.txt")
+  }
+  
+  print("making new refGene_notPseudo.txt file ... ")
+  system("awk 'NR > 1{printf \"chr%s\\t%s\\t%s\\t%s\\t0\\t%s\\n\",$2,$3,$4,$1,$5 }' pseudogenes.txt > pseudogenes.bed")
+  system("awk 'NR >1{printf \"%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n\",$3,$5,$6,$2,$12,$4,$13,$9,$10,$11 }' refGene.txt > refGene.bed")
+  system("awk 'NR == 1{printf \"%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n\",$3,$5,$6,$2,$12,$4,$13,$9,$10,$11 }' refGene.txt > refGene_notPseudo.txt")
+  system("bedtools intersect -a refGene.bed -b pseudogenes.bed -s -v >> refGene_notPseudo.txt")
+  
+    
+}
 
 refseq.noPseudogenes = read.delim("refGene_notPseudo.txt")
 nonPseudoIDs = subset(refseq, paste(chrom,txStart,txEnd) %in% paste(refseq.noPseudogenes$chr, refseq.noPseudogenes$txStart,refseq.noPseudogenes$txEnd),'UniqueID')[,1]

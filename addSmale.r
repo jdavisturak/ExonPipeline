@@ -1,5 +1,14 @@
 ## use data from Tilgner et al. 2012 Genome Research
 
+### in mm10:
+#  awk -F "\t" 'NR >1 {printf "%s\t%s\t%s\t%d\t%d\t%d\t%d\t%d\t%s\t%s\n",$4,$1,$6,$2,$3,$2,$3,$8,$9,$10 }' refGene_notPseudo.txt > refGene_notPseudo.genePred
+# genePredToGtf 'file' refGene_notPseudo.genePred refGene_notPseudo.gtf
+# sh ~/Code/bam2ssj/gtf2cps.sh refGene_notPseudo.gtf > refGene_notPseudo.cps
+
+## in /home/jeremy/RNAseq/Smale/mm10/cyt_ssj
+#run_bam2ssj.py -i . -o . -c /home/jeremy/ExonPipeline/mm10/refGene_notPseudo.cps -N 5
+
+
 rm(list=ls())
 library(gplots)
 library(RColorBrewer)

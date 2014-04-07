@@ -159,6 +159,22 @@ load("Spring2014_Human_multiple_cellTypes_splicingInfo.RData")
 # save(myCleavedFractions,myNuclear_CleavedFractions,mergedData2,mergedData3, file='Spring2014_Human_multiple_cellTypes_splicingInfo.RData')
 # print("Finished Saving the first part")
 
+summarizeIntrons = function(mData, column='K562_Nucleus A(-)'){
+  if (column %in% dimnames(mData)[[2]])
+    mData = mData[!is.na(mData[,column]),]
+  c(UniqueGenes = length(unique(mData$UniqueID)), NumIntrons=nrow(mData))
+}
+
+summarizeIntrons(mergedData)
+# UniqueGenes  NumIntrons 
+# 13037      107596 
+summarizeIntrons(mergedData2)
+# UniqueGenes  NumIntrons 
+# 2768       17266 
+summarizeIntrons(mergedData3)
+# UniqueGenes  NumIntrons 
+# 2136       13650 
+
 
 ## For all genes in mergedData3 (those that have evidence of correct splicing in Cytoplasmic)
 ## measure the distribution of the cleavage Ratio of those genes in THIS sample
@@ -171,8 +187,30 @@ for ( i in 1:nrow(ChromInfo)){
 }
 
 # Obtain a list of genes that have cleavage Ratio of 0.8 or higher
-polyA80 = sapply(1:9,function(i)try(length(which(myPolyA[[i]] > 0.8))/length(myPolyA[[i]])))
+polyA80 = sapply(1:9,function(i)try(length(which(myPolyA[[i]] > 0.8))/length(myPolyA[[i]][!is.na(myPolyA[[i]])])))
 
+#############################################################################
+###  Now figure out the correlation between the FIT and the data
+#############################################################################
+# First predict the fit for each
+load(sprintf('Multiple_CellTypes2_splicing%d.RData',100))
+fitCoefs = coef(FitData[[2]])
+mergedData3$NucMinus_predictions = MeanGamma2(mergedData3$Dist2End, fitCoefs[1], fitCoefs[2],fitCoefs[3],fitCoefs[4])
+
+# , Sigma=mergedData3$`K562_Nucleus A(-)`,isHK=mergedData3$isHK)
+f=function(pred)cor(pred$`K562_Nucleus A(-)`, pred$NucMinus_predictions, use='p')
+
+f(mergedData3)
+# [1] 0.4323805
+f(subset(mergedData3,isHK==1))
+# [1] 0.4039321
+f(subset(mergedData3,isHK==0))
+# [1] [1] 0.4429807
+f(subset(mergedData3,(GeneSize==1 | GeneSize==4)))
+
+#[1] 0.5349787
+f(subset(mergedData3,isHK==0 & (GeneSize==1 | GeneSize==4)))
+#[1] 0.5496602
 
 #############################################################################
 ### Now make median quantile plots for all of these

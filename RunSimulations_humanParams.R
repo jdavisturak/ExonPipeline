@@ -28,10 +28,10 @@ runModelPaper = function( dataDir, fitData_to_model, fitData_to_model2, gitDir="
   
   # Using the fitted parameters
   Elong = 1/(fitData_to_model[2]/fitData_to_model[1])
-  Elong_noRT = 1/(fitData_to_model2[2]/fitData_to_model[1])
+  Elong_noRT = 1/(fitData_to_model2[2]/fitData_to_model2[1])
   
   gamma1 = fitData_to_model[1]
-  gamma2 = fitData_to_model[2]
+  gamma2 = fitData_to_model2[1]
   
   readThrough = fitData_to_model[4]
   
@@ -47,6 +47,17 @@ runModelPaper = function( dataDir, fitData_to_model, fitData_to_model2, gitDir="
   Acceptor_div = 1/(mult_factor-1) 
   K_adjusted=K_splice
   
+  ## Try again to do this with adjustment: make it so that the avg. total TIME of splicing is the same as with original parameter
+  # Avg Total time (Current) = num_introns/K_splice
+  # Avg Total Time (new)  = 1/K2/2 + (num_nonlast_introns)/K2 = (1/2 + num_nonLast)/K2 
+  # K2 = K_splice *(1/2 + num_nonlast)/num_introns
+  
+  # Avg. # of introns:
+  avg_num_introns = mean(subset(mergedData,!duplicated(UniqueID))$exonCount-1) 
+  #8.696 in human data
+  # 1 less than this is the total number of non-last introns
+  K_adjusted = K_splice * (avg_num_introns - .5)/avg_num_introns
+
 
   myEfficiencies = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData_forFit[x ,], extraDist=extraDist,Elong=Elong,readThrough=readThrough, K_splice=K_adjusted,G=gamma1,Stability_exp=Stability_exp,Stability_div=Stability_div,Acceptor_div=Acceptor_div))
   
@@ -55,6 +66,7 @@ runModelPaper = function( dataDir, fitData_to_model, fitData_to_model2, gitDir="
   myEfficiencies_noPause = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData[x,], extraDist=extraDist,Elong=Elong,readThrough=readThrough, G=gamma1,K_splice=K_adjusted,Stability_div=Inf,Stability_exp=Stability_exp,Acceptor_div=Acceptor_div))
   
   myEfficiencies_plain = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData[x,], extraDist=extraDist,Elong=Elong,readThrough=readThrough, K_splice=K_splice,G=gamma1,Stability_div=Inf, Acceptor_div=Inf,Stability_exp=Stability_exp))
+
   myEfficiencies_noRT = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData[x,], extraDist=extraDist,Elong=Elong,readThrough=0, K_splice=K_splice,G=gamma2,Stability_div=Inf, Acceptor_div=Inf,Stability_exp=Stability_exp))
   
   # Get other info
@@ -102,12 +114,13 @@ runModelPaperGRO = function( dataDir, fitData_to_model,dataWithGRO, gitDir="~/Co
   Stability_div = max(S,na.rm=T)*1.20
   extraDist = rep(extraLength,nrow(mergedData))
   
-  # For simplified version: multiplication factor = 1 + 1/Acceptor_div
+  # For simplified version: multiplication factor = 1 + 1/Acceptor_div (ok this is dumb, it's there as a division factor for historical reasons)
   K_splice = 1
   Acceptor_div = 1/(mult_factor-1) 
+  
+  # No adjustment to the other K's
   K_adjusted=K_splice
-  
-  
+    
   
   myEfficiencies = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData_forFit[x ,], extraDist=extraDist,Elong=Elong,readThrough=mergedData_forFit$Runon[x], K_splice=K_adjusted,G=gamma1,Stability_exp=Stability_exp,Stability_div=Stability_div,Acceptor_div=Acceptor_div))
   
@@ -182,4 +195,27 @@ plotSimulations = function(efficiencyData, ExtraText, Stability_div,settings, ex
     axis(1,at=2*(3*wid+(0:3)*offset)-(0:3)*wid*2, lab = c('Short','Med short','Med long','Long')) 
   }
   plot.off()
+}
+
+
+
+plotPerturbations = function(efficiencyData, ExtraText, Stability_div,settings, extraLength=147){
+  
+  
+  
+  ### PLOT better ####
+  library(reshape2)
+  eff2 = melt(efficiencyData[,c(!grepl('(RT)',dimnames(efficiencyData)[[2]]))],id=c('UniqueID','isHK','GeneSize','MaxFeature','intronCountGroups'))
+  
+  
+  plot.dev(sprintf("%s_GenomeSimulations2_%s_numIntrons_by_geneSize_nucElong_%d_noAdjust_median%.3f.pdf",settings$CommonName,ExtraText, extraLength,Stability_div),'pdf',height=1.5,width=4)  
+  cex=0.6;width=0.4;myCols5 = cols=(brewer.pal(9,"YlGnBu"))[5:9]; pch=16
+  par(cex=cex,mai=c(0.1,0.2,0.01,0.01),pch=pch)
+  
+  at = c(c(1:5,7:11), 13 + c(1:5,7:11), 26  + c(1:5,7:11),39+c(1:5,7:11))
+  boxplot(value ~ intronCountGroups + variable+GeneSize, data= subset(eff2,GeneSize %in% c(1,4)) , at=at,boxwex=width, col=myCols5,pch=20,xaxt='n',ylim=c(0,1))
+  grid()
+  plot.off()
+  
+  
 }

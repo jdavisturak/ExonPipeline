@@ -81,6 +81,8 @@ simulateGene = function(myData, Elong=3000, K_splice=1, G=1,Stability_div=4, Acc
   # Get all the K_splice (Acceptor)
   #Ks = Acceptor2k(limitToMax(myData$Acceptor,maxAcceptor), K_splice, Acceptor_div)
   Ks = rep(K_splice,nrow(myData))
+  
+  # Set the LAST intron to be faster, if applicable
   Ks[length(Ks)] = K_splice * (1 + 1/Acceptor_div)
   #e=proc.time(); kTime <<- kTime+e-d
   

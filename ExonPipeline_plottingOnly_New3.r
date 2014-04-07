@@ -53,6 +53,9 @@ if (!file.exists('refGene_notPseudo.txt')){
   system("awk 'NR == 1{printf \"%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n\",$3,$5,$6,$2,$12,$4,$13,$9,$10,$11 }' refGene.txt > refGene_notPseudo.txt")
   system("bedtools intersect -a refGene.bed -b pseudogenes.bed -s -v >> refGene_notPseudo.txt")
   
+  system("awk -F \"\\t\" 'NR >1 {printf \"%s\\t%s\\t%s\\t%d\\t%d\\t%d\\t%d\\t%d\\t%s\\t%s\\n\",$4,$1,$6,$2,$3,$2,$3,$8,$9,$10 }' refGene_notPseudo.txt > refGene_notPseudo.genePred")
+  system("genePredToGtf 'file' refGene_notPseudo.genePred refGene_notPseudo.gtf")
+  system("sh ~/Code/bam2ssj/gtf2cps.sh refGene_notPseudo.gtf > refGene_notPseudo.cps")
     
 }
 

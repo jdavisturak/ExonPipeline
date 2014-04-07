@@ -196,7 +196,7 @@ for (intervals in list(
 
 
 ### This way is different:
-### Do this for poly(A) ends that I mean to use for bigWigAverageOverBed
+### Do this for /Volumes/bigmax.ucsd.edu/Code/ExonPipeline/ExonPipeline_functions.rpoly(A) ends that I mean to use for bigWigAverageOverBed
 UP=DOWN=100
 
 refseq$polyAstart = refseq$Ends - UP   * ifelse(refseq$strand=='+', 1, -1)
@@ -206,12 +206,14 @@ refseq$polyAend =   refseq$Ends + DOWN * ifelse(refseq$strand=='+', 1, -1)
 refseq$PolyA_upName = paste(refseq$UniqueID,'_Up',sep='')
 refseq$PolyA_downName = paste(refseq$UniqueID,'_Down',sep='')
 
+refseq2 = subset(refseq, (strand=='+' & polyAstart > 1) | (strand=='-' & polyAend > 1))
+
 # First write 'up' then down
 polyAFile = sprintf('%s_polyA_UpDown_%dTo%d.bed',settings$CommonName,UP,DOWN)
-write.delim(subset(refseq,strand=='+' ,c('chrom','polyAstart','Ends','PolyA_upName','exonCount','strand')),File=polyAFile,col.names=F)
-write.delim(subset(refseq,strand=='-' ,c('chrom','Ends','polyAstart','PolyA_upName','exonCount','strand')),File=polyAFile,col.names=F,append=T)
-write.delim(subset(refseq,strand=='+' ,c('chrom','Ends','polyAend','PolyA_downName','exonCount','strand')),File=polyAFile,col.names=F,append=T)
-write.delim(subset(refseq,strand=='-' ,c('chrom','polyAend','Ends','PolyA_downName','exonCount','strand')),File=polyAFile,col.names=F,append=T)
+write.delim(subset(refseq2,strand=='+' ,c('chrom','polyAstart','Ends','PolyA_upName','exonCount','strand')),File=polyAFile,col.names=F)
+write.delim(subset(refseq2,strand=='-' ,c('chrom','Ends','polyAstart','PolyA_upName','exonCount','strand')),File=polyAFile,col.names=F,append=T)
+write.delim(subset(refseq2,strand=='+' ,c('chrom','Ends','polyAend','PolyA_downName','exonCount','strand')),File=polyAFile,col.names=F,append=T)
+write.delim(subset(refseq2,strand=='-' ,c('chrom','polyAend','Ends','PolyA_downName','exonCount','strand')),File=polyAFile,col.names=F,append=T)
 
 
 ######################################################

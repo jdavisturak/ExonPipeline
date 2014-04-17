@@ -4,12 +4,10 @@
 ### Function to read in the settings file ############
 ############################################################################################################
                  
-setup = function(Folder=getwd()){
-  ## First move to directory
-  setwd(Folder)
+setup = function(Folder=getwd(), chDir=FALSE){
 
   ## Read in the settings
-  settings.txt = read.delim('settings.txt',head=FALSE)
+  settings.txt = read.delim(sprintf('%s/settings.txt',Folder),head=FALSE)
   
   ##  Set up the settings object
   settings = data.frame(t(as.character(settings.txt[,1])),stringsAsFactors=FALSE)
@@ -34,6 +32,11 @@ setup = function(Folder=getwd()){
   settings$NucTestFile = 'exons_forSeqToNuc.txt'
   
   class(settings) <- "ExonPipeline"
+  
+  ## move to directory
+  if (chDir)
+    setwd(Folder)
+
 
   return(settings)
 }
@@ -69,9 +72,9 @@ loadGenome = function (settings){
 ############################################################################################################
 
 loadRefgene = function(settings){
-
+    refGene = paste(settings$thisDir,'refGene.txt',sep='/')
   # First check if the refGene.txt file exists in this folder
-  if (!file.exists("refGene.txt")){  
+  if (!file.exists(refGene)){
   	cat(sprintf("Downloading refgene:\n"))
     
     ## No file yet: download from UCSC:
@@ -80,7 +83,7 @@ loadRefgene = function(settings){
   }
 
   ## Load the file, return
-  read.delim('refGene.txt',stringsAsFactors=FALSE)
+  read.delim(refGene,stringsAsFactors=FALSE)
 }
 
 
@@ -106,14 +109,14 @@ loadFeatures= function(settings,refseq,genome){
   	# Find exon and intron starts, stops
     cat(sprintf("Parsing refseq file for features:\n"))
     features = retrieveFeatures(settings,refseq,genome)
-    write.table(features$exons,  file='exons.txt',  sep="\t",quote=FALSE,row.names=FALSE)
-    write.table(features$introns,file='introns.txt',sep="\t",quote=FALSE,row.names=FALSE)
+    write.table(features$exons,  file=paste(settings$thisDir,'exons.txt',sep='/'),  sep="\t",quote=FALSE,row.names=FALSE)
+    write.table(features$introns,file=paste(settings$thisDir,'introns.txt',sep='/'),sep="\t",quote=FALSE,row.names=FALSE)
         
    }else{
  	  cat(sprintf("Reading in features\n"))
    	# Read exons, introns in from txt files
-  	exons   = read.delim('exons.txt',  stringsAsFactors=FALSE)
-  	introns = read.delim('introns.txt',stringsAsFactors=FALSE)   
+  	exons   = read.delim(paste(settings$thisDir,'exons.txt',sep='/'),  stringsAsFactors=FALSE)
+  	introns = read.delim(paste(settings$thisDir,'introns.txt',sep='/'),stringsAsFactors=FALSE)   
   	features = list(exons=exons, introns=introns)
 
    }
@@ -529,7 +532,12 @@ retrieveFixedSequences_min = function (settings,featureList,genome,width=147,ove
         right = featureList[i,myCol] + overhangUp # 'upstream' is in the context of transcription
         left  = featureList[i,myCol] - overhangDown - featureList$seqLength[i] + 1 # Correct for 0-indexing
         
-        seq = as.character(reverseComplement(subseq(genome[[featureList$chr[i]]],start=left,end=right)))
+        seq = try(as.character(reverseComplement(subseq(genome[[featureList$chr[i]]],start=left,end=right))))
+        if (inherits(seq,'try-error')){
+            print(featureList[i,])
+            stop(sprintf("\nSequence %s had error.  Last Saved: %s",i,lastSaved))
+
+        }
       }
 			
       # save seq to array
@@ -848,7 +856,7 @@ makeLastExonBed = function(settings,features){
   outputBed = cbind(lasts$chr,lasts$start,lasts$start,lasts$UniqueID,0,lasts$strand)
 
   ## writeFile
-  settings$lastExonBed = 'last_exons5.bed'
+  settings$lastExonBed = paste(settings$thisDir,'last_exons5.bed',sep='/')
   write.table(outputBed, settings$lastExonBed, sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
   
   return(settings)
@@ -870,7 +878,7 @@ make2ndExonBed = function(settings,features){
   outputBed = cbind(seconds$chr,seconds$start,seconds$start,seconds$UniqueID,0,seconds$strand)
 
   ## writeFile
-  settings$secondExonBed = 'second_exons5.bed'
+  settings$secondExonBed = paste(settings$thisDir,'second_exons5.bed',sep='/')
   write.table(outputBed, settings$secondExonBed, sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
   
   return(settings)
@@ -893,7 +901,7 @@ makeAllExonBed = function(settings,features){
   outputBed = cbind(alls$chr,alls$start,alls$start,paste(alls$UniqueID,alls$FeatureCount-1,sep='_'),0,alls$strand) # adding intron number
 
   ## writeFile
-  settings$allExonBed = 'all_exons5.bed'
+  settings$allExonBed = paste(settings$thisDir,'all_exons5.bed',sep='/')
   write.table(outputBed, settings$allExonBed, sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
   
   return(settings)

@@ -254,3 +254,10 @@ axis(1,-2:6,sapply((-2:6)-3,function(x) format(10^(x),scientific=F)),las=2)
 axis(2,seq(0,1,.1),lab=NA,tcl=-.3)
 axis(2,seq(0,1,.5),tcl=-.5)
 }
+
+formatAxes_min = function(Elong){  #format for time to elongate, in minutes.
+  axis(1,-2:6,sapply((-2:6),function(x) sprintf("%.1f",10^(x)/Elong)),las=2)
+  axis(2,seq(0,1,.1),lab=NA,tcl=-.3)
+  axis(2,seq(0,1,.5),tcl=-.5)
+}
+

@@ -4,10 +4,11 @@
 ################################################################################################################
 ################################################################################################################
 
-runModelPaper = function( dataDir, fitData_to_model, fitData_to_model2, gitDir="~/Code",mult_factor=2,extraLength=147){
+runModelPaper = function( dataDir, fitData_to_model, fitData_to_model2, gitDir="~/Code",mult_factor=2,extraLength=147,mergedData=NULL){
   
   # load(sprintf("%s/ExonPipeline/hg19/Multiple_CellTypes2_splicing100.RData",homedir))
-  load(sprintf("%s/PlottedData_new3.RData",dataDir)) 
+  if(is.null(mergedData))
+    load(sprintf("%s/PlottedData_new3.RData",dataDir)) 
   source(sprintf("%s/ExonPipeline/ExonPipeline_simulate_model.r",gitDir))
 #   debug(modelIntron)
   # column=2
@@ -83,9 +84,11 @@ efficiencyData = data.frame(UniqueID=names( myEfficiencies), isHK=genes.isHK,Gen
 }
 
 
-runModelPaperGRO = function( dataDir, fitData_to_model,dataWithGRO, gitDir="~/Code",mult_factor=2,extraLength=147){
+runModelPaperGRO = function( dataDir, fitData_to_model,dataWithGRO, gitDir="~/Code",mult_factor=2,extraLength=147, mergedData=NULL){
   
-  load(sprintf("%s/PlottedData_new3.RData",dataDir)) 
+  if(is.null(mergedData))
+    load(sprintf("%s/PlottedData_new3.RData",dataDir)) 
+  
   source(sprintf("%s/ExonPipeline/ExonPipeline_simulate_model.r",gitDir))
     
   mergedData = mergedData[order(mergedData$UniqueID,mergedData$FeatureCount),]

@@ -222,3 +222,88 @@ plotPerturbations = function(efficiencyData, ExtraText, Stability_div,settings, 
   
   
 }
+
+
+
+runModelPaper_elongFit = function( dataDir, fitData_to_model, fitData_to_model2, gitDir="~/Code",mult_factor=2,extraLength=147,mergedData=NULL,elongationFit){
+  
+## Here I added 'elongation fit' which is a lm of Elong ~ Stability in a subset of genes
+  
+  
+  if(is.null(mergedData))
+    load(sprintf("%s/PlottedData_new3.RData",dataDir)) 
+  source(sprintf("%s/ExonPipeline/ExonPipeline_simulate_model.r",gitDir))
+
+  
+  
+  mergedData = mergedData[order(mergedData$UniqueID,mergedData$FeatureCount),]
+  
+  # Assign each gene the median stability from its group:
+  S=with(subset(mergedData,isLast==0), tapply(Stability,list(GeneSize,intronCountGroups),median, na.rm=T))
+  S2 = data.frame(S=as.vector(S),GeneSize=rep(1:4,5),intronCountGroups=  rep(1:5, each=4))
+  
+  # Get x-intercept of the fit
+  Xint = (mean(elongationFit$model[,1])-coef(elongationFit)[1])/coef(elongationFit)[2]
+  
+  # Now subtract the x-int to obtain a deviation from the mean 
+  mergedData$GroupStability = S2$S[match(with(mergedData,paste(GeneSize,intronCountGroups )), with(S2,paste(GeneSize,intronCountGroups )) )] - Xint
+  mergedData_forFit = data.frame(Stability=mergedData$GroupStability, Dist2End=mergedData$Dist2End)
+  
+  # Using the fitted parameters
+  Elong = 1/(fitData_to_model[2]/fitData_to_model[1])
+  Elong_noRT = 1/(fitData_to_model2[2]/fitData_to_model2[1])
+  
+  gamma1 = fitData_to_model[1]
+  gamma2 = fitData_to_model2[1]
+  
+  readThrough = fitData_to_model[4]
+  
+  Stability_exp=1
+  Stability_div = -mean(elongationFit$model[,1])/coef(elongationFit)[2] # Elong = Mean - S*b
+  extraDist = rep(extraLength,nrow(mergedData))
+  
+  K_splice = 1
+  
+  
+  # For simplified version: multiplication factor = 1 + 1/Acceptor_div
+  #mult_factor = 2
+  Acceptor_div = 1/(mult_factor-1) 
+  K_adjusted=K_splice
+  
+  ## Try again to do this with adjustment: make it so that the avg. total TIME of splicing is the same as with original parameter
+  # Avg Total time (Current) = num_introns/K_splice
+  # Avg Total Time (new)  = 1/K2/2 + (num_nonlast_introns)/K2 = (1/2 + num_nonLast)/K2 
+  # K2 = K_splice *(1/2 + num_nonlast)/num_introns
+  
+  # Avg. # of introns:
+  avg_num_introns = mean(subset(mergedData,!duplicated(UniqueID))$exonCount-1) 
+  #8.696 in human data
+  # 1 less than this is the total number of non-last introns
+  K_adjusted = K_splice * (avg_num_introns - .5)/avg_num_introns
+  
+  
+  myEfficiencies = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData_forFit[x ,], extraDist=extraDist,Elong=Elong,readThrough=readThrough, K_splice=K_adjusted,G=gamma1,Stability_exp=Stability_exp,Stability_div=Stability_div,Acceptor_div=Acceptor_div))
+  
+  myEfficiencies_noSplice = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData_forFit[x,], extraDist=extraDist,Elong=Elong,readThrough=readThrough,G=gamma1, K_splice=K_splice,Acceptor_div=Inf,Stability_exp=Stability_exp,Stability_div=Stability_div))
+  
+  myEfficiencies_noPause = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData[x,], extraDist=extraDist,Elong=Elong,readThrough=readThrough, G=gamma1,K_splice=K_adjusted,Stability_div=Inf,Stability_exp=Stability_exp,Acceptor_div=Acceptor_div))
+  
+  myEfficiencies_plain = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData[x,], extraDist=extraDist,Elong=Elong,readThrough=readThrough, K_splice=K_splice,G=gamma1,Stability_div=Inf, Acceptor_div=Inf,Stability_exp=Stability_exp))
+  
+  myEfficiencies_noRT = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData[x,], extraDist=extraDist,Elong=Elong,readThrough=0, K_splice=K_splice,G=gamma2,Stability_div=Inf, Acceptor_div=Inf,Stability_exp=Stability_exp))
+  
+  # Get other info
+  genes.isHK = names(myEfficiencies) %in% subset(mergedData,isHK==1,UniqueID)[,1]
+  genes.Size = mergedData$GeneSize[match(names(myEfficiencies), mergedData$UniqueID)]
+  genes.IntronCount = mergedData$MaxFeature[match(names(myEfficiencies), mergedData$UniqueID)]
+  
+  efficiencyData = data.frame(UniqueID=names( myEfficiencies), isHK=genes.isHK,GeneSize=genes.Size,MaxFeature=genes.IntronCount,intronCountGroups =  splitByVector(genes.IntronCount,c(2.5,4.5,7.5,19.5)),
+                              myEfficiencies_noRT,myEfficiencies_plain,myEfficiencies_noSplice,myEfficiencies_noPause,myEfficiencies)
+  
+  
+  list(efficiencyData=efficiencyData, Stability_div=Stability_div)
+  
+}
+
+
+

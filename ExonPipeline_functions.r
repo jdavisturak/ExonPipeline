@@ -532,7 +532,12 @@ retrieveFixedSequences_min = function (settings,featureList,genome,width=147,ove
         right = featureList[i,myCol] + overhangUp # 'upstream' is in the context of transcription
         left  = featureList[i,myCol] - overhangDown - featureList$seqLength[i] + 1 # Correct for 0-indexing
         
-        seq = as.character(reverseComplement(subseq(genome[[featureList$chr[i]]],start=left,end=right)))
+        seq = try(as.character(reverseComplement(subseq(genome[[featureList$chr[i]]],start=left,end=right))))
+        if (inherits(seq,'try-error')){
+            print(featureList[i,])
+            stop(sprintf("\nSequence %s had error.  Last Saved: %s",i,lastSaved))
+
+        }
       }
 			
       # save seq to array

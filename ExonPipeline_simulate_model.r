@@ -23,6 +23,8 @@ limitToMax = function(X, myMax=max(X,na.rm=T)){
 
 ### Calculate time from Distance, Elong, and modified Elong over a short distance
 timeFromModifiedElong = function(Dist,Elong, Elong2, Dist2){
+  if(is.na(Dist2))
+    Dist2=0
   max(c(Dist-Dist2),0)/Elong + Dist2/Elong2
 }
 
@@ -86,7 +88,7 @@ simulateGene = function(myData, Elong=3000, K_splice=1, G=1,Stability_div=4, Acc
   Ks[length(Ks)] = K_splice * (1 + 1/Acceptor_div)
   #e=proc.time(); kTime <<- kTime+e-d
   
-  # Simulate!
+  # Simulate!  
   eff=modelGeneEfficiency(ks=Ks,Time=Times)    
   #f=proc.time(); simulateTime <<- simulateTime+f-e
     

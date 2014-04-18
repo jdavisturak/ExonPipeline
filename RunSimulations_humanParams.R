@@ -211,7 +211,7 @@ plotPerturbations = function(efficiencyData, ExtraText, Stability_div,settings, 
   eff2 = melt(efficiencyData[,c(!grepl('(RT)',dimnames(efficiencyData)[[2]]))],id=c('UniqueID','isHK','GeneSize','MaxFeature','intronCountGroups'))
   
   
-  plot.dev(sprintf("%s_GenomeSimulations2_%s_numIntrons_by_geneSize_nucElong_%d_noAdjust_median%.3f.pdf",settings$CommonName,ExtraText, extraLength,Stability_div),'pdf',height=1.5,width=4)  
+  plot.dev(sprintf("%s_GenomeSimulations2_%s_numIntrons_by_geneSize_nucElong_%d_median%.3f.pdf",settings$CommonName,ExtraText, extraLength,Stability_div),'pdf',height=1.5,width=4)  
   cex=0.6;width=0.4;myCols5 = cols=(brewer.pal(9,"YlGnBu"))[5:9]; pch=16
   par(cex=cex,mai=c(0.1,0.2,0.01,0.01),pch=pch)
   
@@ -224,7 +224,7 @@ plotPerturbations = function(efficiencyData, ExtraText, Stability_div,settings, 
 }
 
 
-
+### Version with actual elongation rates ... 
 runModelPaper_elongFit = function( dataDir, fitData_to_model, fitData_to_model2, gitDir="~/Code",mult_factor=2,extraLength=147,mergedData=NULL,elongationFit){
   
 ## Here I added 'elongation fit' which is a lm of Elong ~ Stability in a subset of genes
@@ -307,3 +307,105 @@ runModelPaper_elongFit = function( dataDir, fitData_to_model, fitData_to_model2,
 
 
 
+##############################################################################################################
+# Custom Elongation rates
+runModelPaper_elongFit2 = function(fitData_to_model, fitData_to_model2, gitDir="~/Code",mult_factor=2,mergedData,elongationFit,EnergyAdjust=0.026){
+  source(sprintf("%s/ExonPipeline/ExonPipeline_simulate_model.r",gitDir))
+  ## Here I added 'elongation fit' which is a lm of Elong ~ Stability in a subset of genes
+  
+  # Using the fitted parameters
+  gamma1 = fitData_to_model[1]  
+  readThrough = fitData_to_model[4]
+  Stability_div = Inf
+      
+  #### Adjusted elongation rate
+  mergedData = mergedData[order(mergedData$UniqueID,mergedData$FeatureCount),]
+  
+  # Assign each gene the median energy from its group:
+  EnergyMatrix=with(mergedData, tapply(FullEnergy,list(GeneSize,intronCountGroups),median, na.rm=T))
+  EnergyMatrix2 = data.frame(S=as.vector(EnergyMatrix),GeneSize=rep(1:4,5),intronCountGroups=  rep(1:5, each=4))  
+  mergedData$Energy40K = EnergyMatrix2$S[match(with(mergedData,paste(GeneSize,intronCountGroups )), with(EnergyMatrix2,paste(GeneSize,intronCountGroups )) )] - EnergyAdjust
+  
+  mergedData$RegionExonDensity = sqrt((mergedData$exonCount-1)*1000/mergedData$GeneLength)
+  mergedData_forFit =  mergedData[,c("Energy40K","RegionExonDensity","Dist2End")]
+  mergedData$Elongation = predict(elongationFit,newdata=mergedData_forFit)
+  mergedData$Elongation[mergedData$Elongation < 50] <- 50
+  mergedData$Stability = 0
+  
+  # Set Elong to be the average Elongation rate
+  Elong = median(mergedData$Elongation)
+
+  #### adjustment for last acceptor site:
+  # For simplified version: multiplication factor = 1 + 1/Acceptor_div  
+  Acceptor_div = 1/(mult_factor-1) 
+  K_splice = Elong*(fitData_to_model[2]/fitData_to_model[1])   # K_splice is Elongation * (k/Elong)
+  # Avg. # of introns:
+  avg_num_introns = mean(subset(mergedData,!duplicated(UniqueID))$exonCount-1) 
+  #8.696 in human data
+  # 1 less than this is the total number of non-last introns
+  K_adjusted = K_splice * (avg_num_introns - .5)/avg_num_introns
+
+  # Simulate  
+  myEfficiencies_plain = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData[x,], Elong=Elong,readThrough=readThrough, K_splice=K_splice,G=gamma1,Stability_div=Inf, Acceptor_div=Inf,Stability_exp=1))
+  
+  myEfficiencies = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData[x ,], Elong=mergedData$Elongation[x],readThrough=readThrough, K_splice=K_adjusted,G=gamma1,Stability_exp=1,Stability_div=Stability_div,Acceptor_div=Acceptor_div))
+  
+  myEfficiencies_noSplice =  tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData[x,], Elong=mergedData$Elongation[x],readThrough=readThrough,G=gamma1, K_splice=K_splice,Acceptor_div=Inf,Stability_exp=1,Stability_div=Stability_div))
+  
+  myEfficiencies_noPause = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData[x,], Elong=Elong,readThrough=readThrough, G=gamma1,K_splice=K_adjusted,Stability_div=Inf,Stability_exp=1,Acceptor_div=Acceptor_div))
+  
+
+  # Get other info
+  genes.isHK = names(myEfficiencies) %in% subset(mergedData,isHK==1,UniqueID)[,1]
+  genes.Size = mergedData$GeneSize[match(names(myEfficiencies), mergedData$UniqueID)]
+  genes.IntronCount = mergedData$MaxFeature[match(names(myEfficiencies), mergedData$UniqueID)]
+  
+  efficiencyData = data.frame(UniqueID=names( myEfficiencies), isHK=genes.isHK,GeneSize=genes.Size,MaxFeature=genes.IntronCount,intronCountGroups =  splitByVector(genes.IntronCount,c(2.5,4.5,7.5,19.5)), myEfficiencies_plain,myEfficiencies_noSplice,myEfficiencies_noPause,myEfficiencies)
+  
+  list(efficiencyData=efficiencyData, Stability_div=Stability_div)
+}
+
+############################################################################################################
+# Custom Elongation rates, already computed
+runModelPaper_elongFit3 = function(fitData_to_model, fitData_to_model2, gitDir="~/Code",mult_factor=2,mergedData,EnergyAdjust=0.026){
+  source(sprintf("%s/ExonPipeline/ExonPipeline_simulate_model.r",gitDir))
+  ## Here I added 'elongation fit' which is a lm of Elong ~ Stability in a subset of genes
+  
+  # Using the fitted parameters
+  gamma1 = fitData_to_model[1]  
+  readThrough = fitData_to_model[4]
+  Stability_div = Inf
+  
+  mergedData = mergedData[order(mergedData$UniqueID,mergedData$FeatureCount),]
+  # Set Elong to be the average Elongation rate
+  Elong = median(mergedData$Elongation)
+  
+  #### adjustment for last acceptor site:
+  # For simplified version: multiplication factor = 1 + 1/Acceptor_div  
+  Acceptor_div = 1/(mult_factor-1) 
+  K_splice = Elong*(fitData_to_model[2]/fitData_to_model[1])   # K_splice is Elongation * (k/Elong)
+  # Avg. # of introns:
+  avg_num_introns = mean(subset(mergedData,!duplicated(UniqueID))$exonCount-1) 
+  #8.696 in human data
+  # 1 less than this is the total number of non-last introns
+  K_adjusted = K_splice * (avg_num_introns - .5)/avg_num_introns
+  
+  # Simulate  
+  myEfficiencies_plain = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData[x,], Elong=Elong,readThrough=readThrough, K_splice=K_splice,G=gamma1,Stability_div=Inf, Acceptor_div=Inf,Stability_exp=1))
+  
+  myEfficiencies = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData[x ,], Elong=mergedData$Elongation[x],readThrough=readThrough, K_splice=K_adjusted,G=gamma1,Stability_exp=1,Stability_div=Stability_div,Acceptor_div=Acceptor_div))
+  
+  myEfficiencies_noSplice =  tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData[x,], Elong=mergedData$Elongation[x],readThrough=readThrough,G=gamma1, K_splice=K_splice,Acceptor_div=Inf,Stability_exp=1,Stability_div=Stability_div))
+  
+  myEfficiencies_noPause = tapply(1:nrow(mergedData), mergedData$UniqueID, function(x)simulateGene(mergedData[x,], Elong=Elong,readThrough=readThrough, G=gamma1,K_splice=K_adjusted,Stability_div=Inf,Stability_exp=1,Acceptor_div=Acceptor_div))
+  
+  
+  # Get other info
+  genes.isHK = names(myEfficiencies) %in% subset(mergedData,isHK==1,UniqueID)[,1]
+  genes.Size = mergedData$GeneSize[match(names(myEfficiencies), mergedData$UniqueID)]
+  genes.IntronCount = mergedData$MaxFeature[match(names(myEfficiencies), mergedData$UniqueID)]
+  
+  efficiencyData = data.frame(UniqueID=names( myEfficiencies), isHK=genes.isHK,GeneSize=genes.Size,MaxFeature=genes.IntronCount,intronCountGroups =  splitByVector(genes.IntronCount,c(2.5,4.5,7.5,19.5)), myEfficiencies_plain,myEfficiencies_noSplice,myEfficiencies_noPause,myEfficiencies)
+  
+  list(efficiencyData=efficiencyData, Stability_div=Stability_div)
+}

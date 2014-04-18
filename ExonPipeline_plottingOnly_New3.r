@@ -26,6 +26,7 @@ LENGTH = cbind(Value = abs(exons$start-exons$end), isLast = exons$isLast)
 # Get Nucleosome energy
 energyData = read.delim(settings$nucNormScore_constrained,head=F,stringsAsFactors=F)
 ENERGY = formatData(energyData)
+energyDataMean = read.delim(sub("norm","mean",settings$nucNormScore_constrained),head=F,stringsAsFactors=F)
 
 ## Get splice site strength
 donorData = read.delim(settings$DonorsNorm,head=F,stringsAsFactors=F)
@@ -37,7 +38,7 @@ ACCEPTOR = formatData(acceptorData)
  
 bins = c(1,2,5,10) 
 HKlist = read.delim("/home/jeremy/ExonPipeline/hg19/HouseKeepingGenes.txt",skip=1)
-mergedData = mergeLastData(exons,energyData,donorData,acceptorData,bins*180,HKlist)
+#mergedData = mergeLastData(exons,energyData,donorData,acceptorData,bins*180,HKlist)
 
 ## Get rid of pseudo-genes 
 if (!file.exists('refGene_notPseudo.txt')){
@@ -85,7 +86,7 @@ exons2$energy_ID = paste(">",paste(exons2$UniqueID,exons2$FeatureCount,exons2$is
 exons2$exonLength = abs(exons2$start-exons2$end)
 introns2$exonLength = exons2$exonLength[match(introns2$energy_ID, exons2$energy_ID)]
 
-energyData2 = energyData; names(energyData2) = c("energy_ID","Stability")
+energyData2 = cbind(energyData,energyDataMean[,2]); names(energyData2) = c("energy_ID","Stability","Energy")
 donorData2 = donorData; donorData2$ID = sub("_([0|1])$","",donorData2$V1) ; names(donorData2) = c("","Donor","donor_ID") 
 acceptorData2 = acceptorData; acceptorData2$ID = sub("_([0|1])$","",acceptorData2$V1) ; names(acceptorData2) = c("","Acceptor","acceptor_ID")
 

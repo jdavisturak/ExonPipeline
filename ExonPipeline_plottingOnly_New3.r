@@ -12,9 +12,10 @@ source("/home/jeremy/ExonPipeline/ExonPipeline_functions.r")
 source("/home/jeremy/ExonPipeline/ExonPipeline_analysis_and_plotting_Functions.r")
 source("/home/home/jeremy/Code/useful_R/useful_R.r")
 
-settings = setup(getwd())
-refseq<-add_UniqueID(loadRefgene(settings))
-features = loadFeatures(genome=loadGenome(settings<-setup( getwd())),settings=settings,refseq)
+settings <- setup(getwd())
+refseq <-add_UniqueID(loadRefgene(settings))
+genome <- loadGenome(settings)
+features <- loadFeatures(genome=genome,settings=settings,refseq)
 
 # 1) Comparisons of ALL to LAlsDOST
 cat("	Reading in data to plot:\n")
@@ -123,6 +124,20 @@ mergedData$GeneSize = splitByVector(mergedData$GeneLength,qr)
 mergedData$intronCountGroups = splitByVector(mergedData$MaxFeature,c(2.5,4.5,7.5,19.5))
 mergedData$intronLengthGroups = quantileGroups(mergedData$length,4)
 
+# This isn't really plotting, but it's easy to do it here, since I have the mergedData object.  
+elongFeatures = subset(mergedData,FeatureCount==1)
+elongFeatures$start <- elongFeatures$end # mergedData keeps track of INTRONS: start with the end of intron 1!
+elongFeatures$end = ifelse(elongFeatures$strand=='-',elongFeatures$txStart,elongFeatures$txEnd)
+elongFeatures$Length = abs(elongFeatures$end-elongFeatures$start)
+elongFeatures$isLast = 0
+elongFeatures$FeatureCount=0
+
+settings = computeNucleosomeEnergy_additional(settings,elongFeatures,genome, "mergedData_splicingSimpleRegions_forSeqToNuc.txt",WIDTH = Inf)
+energy_1splicingRegion = read.delim("mergedData_splicingSimpleRegions_forSeqToNuc_mean.txt",head=F,col.names=c('Energy1Region_ID','Energy1Region'))
+rm(elongFeatures)
+mergedData$Energy1Region = energy_1splicingRegion$Energy1Region[match(mergedData$UniqueID, sub(">([0-9]*)_0_0","\\1",energy_1splicingRegion$Energy1Region_ID))]
+rm(energy_1splicingRegion)
+
 save.image("PlottedData_new3.RData")
 
 cat("	Plotting data:\n") 
@@ -162,6 +177,8 @@ dev.off()
 #write.delim(cbind(lengths_last,strength_lasts_avg,strength_nonLast,energy_lasts_avg), 'Normalized_averages_byLength_6.txt') 
 #
 #
+
+
 
 cat("Writing .BED files:\n")            
 
@@ -333,6 +350,18 @@ HK = list(0:1,0,1)
     
  
   }
+
+plot.dev(sprintf('%s_1SplicingRegion_Stability_by_numIntrons_geneSize3.pdf',settings$CommonName),'pdf',height=3,width=4)
+par(mai=c(.45,.45,0.24,0.1),cex=0.6, cex.main=1) 
+
+for(i in 0:1){
+  try(boxplot(Stability ~ intronCountGroups+GeneSize,data=mergedData[!duplicated(mergedData$UniqueID),],notch=T,staplewex=0,ylim=2*c(-1.25,1.25),col=cols[1:5],at=c(1:5,7:11,13:17,19:23),outline=F,range=0.00001,add=i,ylab='Nucleosome Stability score',xaxt='n'))
+  axis(1,at=c(3,9,15,21),lab=c('Short','Med short','Med long','Long'))
+  if(!i) 
+    abline(h=seq(-4,4,by=0.5),col='gray',lty=2)
+}
+plot.off()
+
 #
 ### Also split this up between LAST and INTERNAL exons
 #HK = list(0,1)

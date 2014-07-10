@@ -74,6 +74,27 @@ makeBarplot = function(DATA, mainText ='', doLog=F, YLIM=NULL, addStats=TRUE,err
   
 }
 
+##### Function to make ONE set of barplots: take LOG first, if applicable
+makeBarplot2 = function(DATA, mainText ='', doLog=F, YLIM=NULL, addStats=TRUE,errorcol='black', ...){
+  #
+    if (doLog){
+      DATA[,1] = log10(DATA[,1])
+    }
+  
+  stats = getStats(DATA[,1],DATA[,2])  
+  up = stats[,1] + stats[,2]
+  down = stats[,1] - stats[,2]
+  
+  if(is.null(YLIM)) YLIM = c(0, max(rowSums(stats[,1:2]))*1.2)
+  
+  if(addStats) mainText=paste(mainText,lmText(DATA,FALSE),sep="\n")
+  
+  x=barplot(stats[,1], main=mainText, names=c('Non-last','last'), ylim=YLIM,...)
+  arrows(x,stats[,1],x, up ,angle=90,length=0.15,col=errorcol,lwd=2,gap=0);
+  arrows(x,stats[,1],x, down,angle=90,length=0.15,col=errorcol,lwd=2,gap=0);
+  abline(h=0,lwd=1)
+  
+}
 
 
 

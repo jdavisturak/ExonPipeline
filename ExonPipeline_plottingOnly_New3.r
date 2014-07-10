@@ -153,6 +153,22 @@ par(mfrow=c(4,1),cex.axis=1.2,cex=0.7,cex.main=1.1,mar=c(2,3,2,1),lwd=4)
   makeBarplot(ACCEPTOR,'',doLog=F,col=barCols, YLIM=c(-.25,0.25),addStats=F,border=NA,errorcol=errorcol)
 dev.off()
 
+pdf(sprintf('%s_Barplots8.pdf',settings$CommonName),height=7,width=4)
+  par(mfrow=c(3,1),cex.axis=1.2,cex=0.7,cex.main=1.1,mar=c(2,5,2,1),lwd=4)
+  #errorcol=rgb(1/2,1/4,0.26)
+  errorcol='black';
+  barCols = c('gray','gray')
+
+makeBarplot2(cbind(Value=mergedData$exonLength,isLast=mergedData$isLast),'',doLog=T,col=barCols,yaxt='n',border=NA,errorcol=errorcol,YLIM=c(1,4.3), xpd=F,ylab='length (bp)', cex.lab=1.2)
+  axis(2,at=0:5,lab=10^(c(NA,1:4,NA)))
+  abline(h=par('usr')[3], lwd=1)
+
+makeBarplot2(cbind(Value=mergedData$Acceptor,isLast=mergedData$isLast),'',doLog=F,col=barCols, YLIM=c(-.25,0.25),border=NA,errorcol=errorcol, ylab='Acceptor score', cex.lab=1.2)
+
+makeBarplot2(cbind(Value=mergedData$Stability,isLast=mergedData$isLast),'',doLog=F,col=barCols, YLIM=c(-.25,0.25),xaxt='s',border=NA,errorcol=errorcol,ylab='Stability score', cex.lab=1.2)
+
+dev.off()
+
 #### OUTPUT enough data to simulate in MATALB
 #lengths_last =  tapply(mergedData$length,mergedData$LengthGroup_S,mean)
 #strength_nonLast = mean(ACCEPTOR[ACCEPTOR[,2]==0,1],na.rm=T)

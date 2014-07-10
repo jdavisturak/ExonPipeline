@@ -3,7 +3,8 @@ library(gplots)
 library(RColorBrewer)
 library(Hmisc)
 
-homedir = '/Volumes//bigmax.ucsd.edu/' # /home/jeremy
+#homedir = '/Volumes//bigmax.ucsd.edu/' # 
+homedir='/home/jeremy'
 
 gitDir = "~/Code/"
 
@@ -20,50 +21,74 @@ ChromInfo  = cbind(c( "Chromatin.ssj","PolyAMinus.ssj","PolyAPlus.ssj","Gm12878.
 
 load("Spring2014_Human_multiple_cellTypes_splicingInfo.RData")
 
-# ##########################################################
-# #### GET SSJ data  (Dmitri D. Pervouchine)
-# ##########################################################
-# dataDir = sprintf("%s/ExonPipeline/hg19",homedir)
-# setwd(dataDir)
-# load("PlottedData_new3.RData")
-#
-# dataDir = '/home/RNAseq/Tilgner/Nucleus/'
-# splicingData = list()
-# splicingData_Theta5 = list()
-# splicingData_Theta3 = list()
-# SplicingMerged = matrix(NA,nr=nrow(mergedData), nc = nrow(ChromInfo))
-# mergedData$coSI_ID = paste(mergedData$chr,rowMins(mergedData[,c('start','end')])+1,rowMaxes(mergedData[,c('start','end')]),1,sep='_')
-# 
-# for(i in 1:nrow(ChromInfo)){
-#   dat=read.delim(paste(dataDir,ChromInfo[i,1],sep=""), head=F,stringsAsFactors=F)
-#   names(dat) = c('coSI_ID','count53', 'count5X', 'countX3', 'count50', 'count03')
-#   print(dim(dat))
-#   
-#   # Compute Theta5, Theta3  (http://bioinformatics.oxfordjournals.org/content/early/2012/11/21/bioinformatics.bts678.full.pdf+html)
-#   dat$Denom5 = dat$count53 + dat$count5X + dat$count50
-#   dat$Theta5 = (dat$count53 + dat$count5X) / dat$Denom5
-#   dat$Denom3 = dat$count53 + dat$countX3 + dat$count03
-#   dat$Theta3 = (dat$count53 + dat$countX3) / dat$Denom3
-# 
-#   # My way:
-#   #dat$DenomJer = dat$count53 + (dat$count50 + dat$count03)/2
-#   dat$DenomJer = dat$count53 + (dat$count50 + dat$count03)/2 + dat$count5X+dat$countX3
-#   dat$SpliceJer = dat$count53 / dat$DenomJer
-#   
-#   cutoff=15
-#   #splicingData[[i]] = dat[dat$DenomJer  > 15,]
-#   splicingData[[i]] = dat[dat$DenomJer  > cutoff & dat$count5X < 1 & dat$countX3 < 1,] # new
-#   splicingData_Theta5[[i]] = dat[dat$Denom5  > cutoff,]
-#   splicingData_Theta3[[i]] = dat[dat$Denom3  > cutoff,]  
-#   
-#   SplicingMerged[,i] = splicingData[[i]]$SpliceJer[match(mergedData$coSI_ID, splicingData[[i]]$coSI_ID)]
-# 
-# }                                                                                                                      
-# 
-# mergedData2 = cbind(mergedData, SplicingMerged)
-# names(mergedData2)[ncol(mergedData) + (1:ncol(SplicingMerged))] = ChromInfo[,2]
-# 
-# 
+##########################################################
+#### GET SSJ data  (Dmitri D. Pervouchine)
+##########################################################
+dataDir = sprintf("%s/ExonPipeline/hg19/",homedir)
+setwd(dataDir)
+load("PlottedData_new3.RData")
+
+dataDir = '/home/RNAseq/Tilgner/Nucleus/'
+splicingData = list()
+splicingData_Theta5 = list()
+splicingData_Theta3 = list()
+SplicingMerged = matrix(NA,nr=nrow(mergedData), nc = nrow(ChromInfo))
+mergedData$coSI_ID = paste(mergedData$chr,rowMins(mergedData[,c('start','end')])+1,rowMaxes(mergedData[,c('start','end')]),1,sep='_')
+
+for(i in 1:nrow(ChromInfo)){
+  dat=read.delim(paste(dataDir,ChromInfo[i,1],sep=""), head=F,stringsAsFactors=F)
+  names(dat) = c('coSI_ID','count53', 'count5X', 'countX3', 'count50', 'count03')
+  print(dim(dat))
+  
+  # Compute Theta5, Theta3  (http://bioinformatics.oxfordjournals.org/content/early/2012/11/21/bioinformatics.bts678.full.pdf+html)
+  dat$Denom5 = dat$count53 + dat$count5X + dat$count50
+  dat$Theta5 = (dat$count53 + dat$count5X) / dat$Denom5
+  dat$Denom3 = dat$count53 + dat$countX3 + dat$count03
+  dat$Theta3 = (dat$count53 + dat$countX3) / dat$Denom3
+  
+  # My way:
+  #dat$DenomJer = dat$count53 + (dat$count50 + dat$count03)/2
+  dat$DenomJer = dat$count53 + (dat$count50 + dat$count03)/2 + dat$count5X+dat$countX3
+  dat$SpliceJer = dat$count53 / dat$DenomJer
+  
+  cutoff=15
+  #splicingData[[i]] = dat[dat$DenomJer  > 15,]
+ 
+  splicingData[[i]] = dat[dat$DenomJer  > cutoff & dat$count5X < 1 & dat$countX3 < 1,] # new
+  splicingData_Theta5[[i]] = dat[dat$Denom5  > cutoff,]
+  splicingData_Theta3[[i]] = dat[dat$Denom3  > cutoff,]
+  
+  # Testing Nuc minus
+  # normal<-  dat[dat$DenomJer  > cutoff,]; noAlt <-  splicingData[[i]] 
+  
+  SplicingMerged[,i] = splicingData[[i]]$SpliceJer[match(mergedData$coSI_ID, splicingData[[i]]$coSI_ID)]
+
+}                                                                                                                      
+mergedData2 = cbind(mergedData, SplicingMerged)
+names(mergedData2)[ncol(mergedData) + (1:ncol(SplicingMerged))] = ChromInfo[,2]
+
+enhance <- function(dat){
+  dat$UniqueID = mergedData$UniqueID[match(dat$coSI_ID,mergedData$coSI_ID)]
+  dat$Sum = rowSums(dat[,2:6])
+  subset(dat,!is.na(UniqueID))
+}
+
+
+# Testing Nuc minus
+normal<-  enhance(dat[dat$DenomJer  > cutoff,]); noAlt <-  enhance(splicingData[[i]])
+hasAlt <- subset(normal,!coSI_ID %in% noAlt$coSI_ID)
+
+alt_containing_genes <- unique(hasAlt$UniqueID)
+no_alt_containing_genes <- setdiff(unique(normal$UniqueID), alt_containing_genes)
+
+readsPerIntron_alt = tapply(normal$Sum[normal$UniqueID %in% alt_containing_genes],normal$UniqueID[normal$UniqueID %in% alt_containing_genes], mean)
+readsPerIntron_no_alt = tapply(normal$Sum[normal$UniqueID %in% no_alt_containing_genes],normal$UniqueID[normal$UniqueID %in% no_alt_containing_genes], mean)
+
+t.test(log(readsPerIntron_no_alt), log(readsPerIntron_alt))
+
+# Now also test WITHIN the alt genes:
+t.test(log(hasAlt$Sum), log(noAlt$Sum[noAlt$UniqueID %in% alt_containing_genes]))
+
 # 
 # #############################################################################
 # ### New 10/29/13: Analyze Cytoplasmic poly(A) RNAseq of these guys first, THEN  do the rest

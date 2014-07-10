@@ -383,7 +383,50 @@ computeNucleosomeEnergy3 = function(settings,features,genome,WIDTH = 147){
     return(settings)
 }
 
+## This is for custom regions because I have the 'additional' tag in the settings, so that it does not overwrite the other tags
+computeNucleosomeEnergy_additional = function(settings,unique_features,genome,file,WIDTH = Inf,overhangUp=0,overhangDown=0){
+    ## Get output file name 
+    settings$nucTestFile_additional = file
+    
+    ## Export specific sequences 
+    if (!file.exists(settings$nucTestFile_additional)){
+      firstSeq = 1
+      cat(sprintf("Retrieving sequences of exons for nucleosome test additional (starting with seq %d):\n", 1))
+       
+       seqs_for_nucleosomes = retrieveFixedSequences_min(settings, unique_features, genome, width=WIDTH, overhangUp=overhangUp, overhangDown=overhangDown, fromStart=TRUE,outputFile=settings$nucTestFile_additional,writeDuring=T,firstSeq=1)
+        
+    }
 
+    ### Run BasicSeqToNuc2.jar
+    settings$nucTestFile_additional_out = sprintf('%s_out.txt',settings$nucTestFile_additional)
+
+    if (!file.exists(settings$nucTestFile_additional_out)){
+      cat("Running Seq To Nuc 2 (on fixed exon lengths)\n")
+
+      system(sprintf("java -Xmx1024m -jar ~/bin/BasicSeqToNuc.jar %s", settings$nucTestFile_additional))
+
+    }     
+    
+    
+    ## Compute the mean over the entire length.
+    settings$nucTestFile_additional_mean = sub(".txt$","_mean.txt",settings$nucTestFile_additional)
+    
+    if (!file.exists(settings$nucTestFile_additional_mean)){
+      cat("Averaging Seq To Nuc output\n")
+     
+      computeNucMean (settings, settings$nucTestFile_additional_out, settings$nucTestFile_additional_mean)
+    }
+    
+    ## Normalize the nucleosome splicing score
+    settings$nucTestFile_additional_constrainted= sub("_mean.txt$","_norm.txt",settings$nucTestFile_additional_mean)
+   
+    if (!file.exists(settings$nucNormScore_constrained)){
+      cat("Normalizing Seq To Nuc output\n")
+      normalizeToText(settings$nucTestFile_additional_mean, settings$nucTestFile_additional_constrainted)
+    }
+
+    return(settings)
+}
 
 ################################################################################################################################################################################
 #### Function to compute the mean of the NUC signal.
@@ -478,6 +521,10 @@ retrieveFixedSequences = function (settings,featureList,genome,width=180,overhan
  		} 
 }
 
+
+
+
+
 ################################################################################################################################################################################
 #### Function to retrieve a CONSTRAINED FIXED LENGTH of a sequence from a list of features 
 ## 4/2/12 This revision allows one to constrain the sequence to N characters.
@@ -486,7 +533,10 @@ retrieveFixedSequences = function (settings,featureList,genome,width=180,overhan
 retrieveFixedSequences_min = function (settings,featureList,genome,width=147,overhangUp=37,overhangDown=37,fromStart=TRUE,firstSeq=1, outputFile=NULL,writeDuring=FALSE,removeBadChars=FALSE){
 	# If 'fromStart' is FALSE, then get the sequenced started from the END of the feature 
 
-    print(width)
+
+    require(Biostrings)
+    require(multicore)
+   
 
     ### First get the Length of the regions
     featureList$Length = abs(featureList$start-featureList$end)
@@ -498,7 +548,8 @@ retrieveFixedSequences_min = function (settings,featureList,genome,width=147,ove
     featureList = subset(featureList,seqLength > 10)
 	
   	# For each feature, add a blank sequence
-  	output_seqs = sapply(featureList$seqLength,function(x)paste(rep('0',x),collapse=''))
+  	#output_seqs = sapply(featureList$seqLength,function(x)paste(rep('0',x),collapse=''))
+
     # Make the .fa headers
     headers = paste(">", featureList$UniqueID, '_', featureList$FeatureCount, '_', featureList$isLast, sep='')    
     #browser()
@@ -509,8 +560,11 @@ retrieveFixedSequences_min = function (settings,featureList,genome,width=147,ove
   	#print(names(featureList))
   	
   	## For each feature, return the sequence. NOTE: need to correct for UCSC's 0-based indexing
-  	lastSaved = firstSeq-1 
-  	for( i in firstSeq:nrow(featureList)){
+  	#lastSaved = firstSeq-1 
+    options(cores=30)
+    print("Starting seqs ...")
+    getOneSeq = function(i){
+  	#for( i in firstSeq:nrow(featureList)){
 		
 		
 		#if(i%%1000==1)
@@ -526,39 +580,54 @@ retrieveFixedSequences_min = function (settings,featureList,genome,width=147,ove
 	
     	}else{                                                
     		
-        # Negative strand: NOTE that left and right are reversed! Because the 'start' in the featureList is the ACTUAL start of the feature
-        #		(i.e. to the right on a genome browser track, in Negative strand), but subseq() function requires end >= start
-        
-        right = featureList[i,myCol] + overhangUp # 'upstream' is in the context of transcription
-        left  = featureList[i,myCol] - overhangDown - featureList$seqLength[i] + 1 # Correct for 0-indexing
-        
-        seq = try(as.character(reverseComplement(subseq(genome[[featureList$chr[i]]],start=left,end=right))))
-        if (inherits(seq,'try-error')){
-            print(featureList[i,])
-            stop(sprintf("\nSequence %s had error.  Last Saved: %s",i,lastSaved))
+            # Negative strand: NOTE that left and right are reversed! Because the 'start' in the featureList is the ACTUAL start of the feature
+            #		(i.e. to the right on a genome browser track, in Negative strand), but subseq() function requires end >= start
+            
+            right = featureList[i,myCol] + overhangUp # 'upstream' is in the context of transcription
+            left  = featureList[i,myCol] - overhangDown - featureList$seqLength[i] + 1 # Correct for 0-indexing
+            
+            seq = try(as.character(reverseComplement(subseq(genome[[featureList$chr[i]]],start=left,end=right))))
+            if (inherits(seq,'try-error')){
+                print(featureList[i,])
+                stop(sprintf("\nSequence %s had error.  Last Saved: %s",i,lastSaved))
 
+            }
         }
-      }
-			
-      # save seq to array
-    	output_seqs[i] <- seq  
-    	 	
-    	# If the writeDuring setting is allowed, save last 1,000 rows to file 	
-    	if(i%%100==0 & writeDuring){                                 
-    			# write some output
-  				savePortion(output_seqs[(lastSaved+1):i],headers[(lastSaved+1):i], outputFile)
-          lastSaved = i
-    		} 	
-    	 	
-    }
-     cat(sprintf("Done                \n"))
-   
-    ## After looping through all sequences, write the remaining outputs to file
-   	if(i != lastSaved){                                 
-       # write some output
-	     savePortion(output_seqs[(lastSaved+1):i],headers[(lastSaved+1):i], outputFile)      
- 		} 
+        return(c(headers[i],seq))
+    }    	
+
+    output<-mclapply(as.list(1:nrow(featureList)),getOneSeq)
+    
+	cat(sprintf("Done, saving\n"))
+    TRY = try(saveAll(unlist(output), outputFile))
+    if (inherits(TRY,'try-error')) browser()
+ 	
 }
+
+
+
+
+################################################################################################################################################################################
+####  ## Subroutine to save all seqs after parallel job
+################################################################################################################################################################################
+
+saveAll = function(output, file){
+    # get rid of bad characters (no-ACGT)
+    seqIndex = seq(2,length(output),by=2)
+    badSeqs <- which(regexpr("([^ACGTacgt])",output[seqIndex]) > 0)
+    if(any(badSeqs)){
+       badSeqIndex = seqIndex[badSeqs]
+       badHeaderIndex = badSeqIndex-1
+       output = output[-(c(badSeqIndex,badHeaderIndex))]
+          
+    }
+    if(length(output) < 1){
+      cat ("All sequences were bad!  Not writing anything\n")
+      return (0)
+     }      
+   
+    write.table(output,  file=file,  sep="\t", quote=FALSE, row.names=FALSE, col.names=FALSE)      
+  }
 
 ################################################################################################################################################################################
 ####  ## Subroutine to save a portion of the sequences during retrieval
